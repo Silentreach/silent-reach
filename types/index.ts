@@ -51,7 +51,16 @@ export interface PostUploadInput {
   youtubeUrl: string;
   audienceOverride?: string;
   locationOverride?: string;
+  visualContext?: string;
   manualTranscript?: string;
+}
+
+export interface ThumbnailRecommendation {
+  currentStrengths: string;
+  currentWeaknesses: string;
+  overlayText: string;
+  compositionNotes: string;
+  moodDirection: string;
 }
 
 export interface HookRewrite {
@@ -80,6 +89,7 @@ export interface PostUploadOutput {
   chapterMarkers: ChapterMarker[];
   shareableClips: ShareableClip[];
   suggestedTags: string[];
+  thumbnailRecommendation: ThumbnailRecommendation;
 }
 
 export interface VideoMeta {
@@ -91,6 +101,7 @@ export interface VideoMeta {
   durationSeconds: number;
   publishedAt: string;
   channelTitle: string;
+  thumbnailUrl: string;
 }
 
 export type HistoryItem =

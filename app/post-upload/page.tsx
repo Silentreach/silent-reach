@@ -11,27 +11,34 @@ import type {
   VideoMeta,
 } from "@/types";
 
-type Result = { meta: VideoMeta; pack: PostUploadOutput };
+type Result = {
+  meta: VideoMeta;
+  pack: PostUploadOutput;
+  transcriptUsed?: boolean;
+  thumbnailUsed?: boolean;
+};
 
 export default function PostUploadPage() {
-  const [input, setInput] = useState<PostUploadInput>({ youtubeUrl: "" });
+  const [input, setInput] = useState<PostUploadInput>({
+    youtubeUrl: "",
+    visualContext: "",
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [needManual, setNeedManual] = useState(false);
-  const [manualTranscript, setManualTranscript] = useState("");
   const [showOverrides, setShowOverrides] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
 
-  async function submit(useManual: boolean) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
     setLoading(true);
     setError(null);
-    if (!useManual) setResult(null);
+    setResult(null);
     try {
       const body: PostUploadInput = {
         youtubeUrl: input.youtubeUrl,
         audienceOverride: input.audienceOverride || undefined,
         locationOverride: input.locationOverride || undefined,
-        manualTranscript: useManual ? manualTranscript : undefined,
+        visualContext: input.visualContext || undefined,
       };
       const res = await fetch("/api/post-upload", {
         method: "POST",
@@ -39,14 +46,13 @@ export default function PostUploadPage() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (res.status === 422 && data.needManualTranscript) {
-        setNeedManual(true);
-        setError(data.error);
-        return;
-      }
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-      setResult({ meta: data.meta, pack: data.pack });
-      setNeedManual(false);
+      setResult({
+        meta: data.meta,
+        pack: data.pack,
+        transcriptUsed: data.transcriptUsed,
+        thumbnailUsed: data.thumbnailUsed,
+      });
       addToHistory({
         kind: "pack",
         id: newId(),
@@ -63,18 +69,14 @@ export default function PostUploadPage() {
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    submit(false);
-  }
-
   return (
     <div className="space-y-10">
       <header>
         <h1 className="text-2xl font-semibold">Post-Upload Pack</h1>
         <p className="mt-1 text-sm text-muted">
-          Paste your YouTube URL. Get captions, titles, hook rewrites, chapters,
-          and shareable clip timestamps in one pass.
+          Paste your YouTube URL. Works for both dialogue-driven and music-only
+          cinematic reels — the thumbnail and description are used as visual
+          context when there&apos;s no spoken script.
         </p>
       </header>
 
@@ -95,6 +97,25 @@ export default function PostUploadPage() {
             }
             placeholder="https://www.youtube.com/watch?v=..."
           />
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">
+            Describe the video (optional but recommended for voice-less reels)
+          </span>
+          <textarea
+            rows={2}
+            value={input.visualContext || ""}
+            onChange={(e) =>
+              setInput((s) => ({ ...s, visualContext: e.target.value }))
+            }
+            placeholder="Oak Bay waterfront estate at golden hour, drone opener, interior millwork detail at 1:20, payoff shot of east-facing balcony"
+          />
+          <span className="mt-1 block text-xs text-muted">
+            One or two sentences naming the key visuals and their approximate
+            timestamps helps Claude write sharper captions and pick better clip
+            moments.
+          </span>
         </label>
 
         <button
@@ -142,35 +163,6 @@ export default function PostUploadPage() {
           </div>
         )}
 
-        {needManual && (
-          <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <div className="mb-2 text-xs text-muted">
-              Paste the transcript manually (one block, any format):
-            </div>
-            <textarea
-              rows={8}
-              value={manualTranscript}
-              onChange={(e) => setManualTranscript(e.target.value)}
-              placeholder="[0:00] Welcome to this walkthrough..."
-            />
-            <button
-              type="button"
-              onClick={() => submit(true)}
-              disabled={loading || !manualTranscript}
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-black transition hover:bg-gold-dim disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                "Retry with manual transcript"
-              )}
-            </button>
-          </div>
-        )}
-
         <div className="flex items-center justify-end">
           <button
             type="submit"
@@ -189,7 +181,33 @@ export default function PostUploadPage() {
         </div>
       </form>
 
-      {result && <PackResult meta={result.meta} pack={result.pack} />}
+      {result && (
+        <>
+          <div className="flex flex-wrap gap-2 text-xs text-muted">
+            <span
+              className={
+                "rounded-full border px-2.5 py-0.5 " +
+                (result.thumbnailUsed
+                  ? "border-gold/40 text-gold"
+                  : "border-border")
+              }
+            >
+              Thumbnail vision: {result.thumbnailUsed ? "used" : "skipped"}
+            </span>
+            <span
+              className={
+                "rounded-full border px-2.5 py-0.5 " +
+                (result.transcriptUsed
+                  ? "border-gold/40 text-gold"
+                  : "border-border")
+              }
+            >
+              Transcript: {result.transcriptUsed ? "used" : "none (OK)"}
+            </span>
+          </div>
+          <PackResult meta={result.meta} pack={result.pack} />
+        </>
+      )}
     </div>
   );
 }

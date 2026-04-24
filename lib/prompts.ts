@@ -61,26 +61,40 @@ Rules for the shot list:
 export function buildPostUploadPrompt(
   meta: VideoMeta,
   transcript: string,
-  overrides: { audience?: string; location?: string }
+  overrides: { audience?: string; location?: string; visualContext?: string }
 ): { system: string; user: string } {
-  const system = `You are a senior post-production content strategist working for Silent Story, a real estate and renovation video production business in Victoria, British Columbia, Canada. A YouTube video has just been uploaded. Your job is to generate a full content pack that maximizes non-follower reach across Instagram, YouTube, LinkedIn, and Facebook - all derived from the video's transcript, title, and description.
+  const hasTranscript = transcript.trim().length > 50;
+
+  const system = `You are a senior post-production content strategist working for Silent Story, a real estate and renovation video production business in Victoria, British Columbia, Canada. A YouTube video has just been uploaded. Your job is to generate a full content pack that maximizes non-follower reach across Instagram, YouTube, LinkedIn, and Facebook.
+
+IMPORTANT: Silent Story produces cinematic real estate reels, listing films, and developer features. Most videos have NO spoken narration — they are visual, music-driven pieces. Your captions and copy must be written FROM THE VISUAL STORY, not from dialogue. You will see the video's thumbnail as an attached image — use it as your primary visual cue, along with the title, description, and any user-provided visual context.
 
 Hard rules:
 - Write in the voice of a thoughtful, grounded videographer who respects his craft and his clients. Never hype. Never salesy.
-- Instagram caption: hook in the first line, max 3 line breaks before the truncation, emojis used sparingly (0-3 total), ends with a low-pressure CTA.
-- LinkedIn post: "here's what I learned" voice, three short paragraphs plus one bullet list, no emojis, ends with a question to drive comments.
+- Instagram caption: hook in the first line (describes the mood or a visual detail, not dialogue), max 3 line breaks before truncation, emojis used sparingly (0-3 total), ends with a low-pressure CTA.
+- LinkedIn post: "here's what I noticed while filming this" voice, three short paragraphs plus one bullet list, no emojis, ends with a question to drive comments.
 - Facebook post: conversational, 3-5 sentences, includes the YouTube link at the top.
-- Title A/B variants: 5 options under 60 characters each, covering at least one curiosity angle, one benefit angle, and one number-driven angle.
-- Hook rewrites: what could the first 3 seconds have said? Write them as script lines (spoken aloud), not captions.
-- Chapter markers: ONLY generate if the video is longer than 90 seconds. For shorter videos, return an empty array.
-- Shareable clips: find the 3 most scroll-stopping 10-20 second moments in the transcript, with start and end timestamps from the transcript timing.
-- Suggested tags: 8-12 tags, lowercase, no "#" symbol. Not a headline feature.
+- Title A/B variants: 5 options under 60 characters each, covering at least one curiosity angle, one benefit angle, and one location-or-number-driven angle.
+- Hook rewrites: for voice-less videos, treat these as the first 3 SECONDS of visual content — what the opening SHOT should be (e.g., "Tight on hand placing a key on quartz counter — cut to wide"). For videos with dialogue, write as spoken script lines.
+- Chapter markers: ONLY generate if (a) the video is longer than 90 seconds AND (b) a transcript is provided with meaningful content. Otherwise return an empty array.
+- Shareable clips: suggest 3 moments (10-20 second ranges) the creator could export as a Reel. For voice-less videos, suggest based on typical real estate reel structure (opening establishing shot, mid-film hero reveal, final payoff) expressed as timestamp ranges. Always provide 3.
+- Suggested tags: 8-12 tags, lowercase, no "#" symbol.
+- Thumbnail recommendation: look at the attached thumbnail image. Describe what's working, what's not, suggest a 3-word overlay text, suggest an alternative composition, and name the mood the thumbnail should evoke. Be specific — reference actual visual elements you see.
 - Return strict JSON matching the schema. No prose outside the JSON. No markdown fences.`;
 
   const audience =
     overrides.audience ||
     "Victoria BC real estate agents, renovation homeowners, and contractors";
   const location = overrides.location || "Victoria BC, Canada";
+  const visualContext = overrides.visualContext?.trim() || "";
+
+  const transcriptBlock = hasTranscript
+    ? `Transcript (with [MM:SS] timestamps):\n${transcript}`
+    : "Transcript: NONE (this video has no spoken narration — generate all copy from the thumbnail image, title, description, and visual context provided)";
+
+  const contextBlock = visualContext
+    ? `Creator's visual context: ${visualContext}`
+    : "Creator's visual context: not provided — rely on the thumbnail image and title/description";
 
   const user = `Video metadata:
 Title: ${meta.title}
@@ -93,9 +107,11 @@ ${meta.description}
 
 Audience context: ${audience}
 Location context: ${location}
+${contextBlock}
 
-Transcript (with [MM:SS] timestamps):
-${transcript}
+${transcriptBlock}
+
+The video's thumbnail is attached as an image. Use it as your primary visual reference.
 
 Return only valid JSON matching this exact schema:
 
@@ -105,7 +121,7 @@ Return only valid JSON matching this exact schema:
   "facebookPost": "string",
   "titleVariants": ["string", "string", "string", "string", "string"],
   "hookRewrites": [
-    { "line": "string", "worksBestFor": "string" },
+    { "line": "string (opening 3 seconds — shot description if no transcript, or spoken hook if transcript exists)", "worksBestFor": "string" },
     { "line": "string", "worksBestFor": "string" },
     { "line": "string", "worksBestFor": "string" }
   ],
@@ -113,11 +129,18 @@ Return only valid JSON matching this exact schema:
     { "timestamp": "0:00", "title": "string" }
   ],
   "shareableClips": [
-    { "startTimestamp": "string", "endTimestamp": "string", "whyItWorks": "string", "suggestedCaption": "string" },
+    { "startTimestamp": "string (e.g. 0:10)", "endTimestamp": "string (e.g. 0:25)", "whyItWorks": "string", "suggestedCaption": "string (under 200 chars)" },
     { "startTimestamp": "string", "endTimestamp": "string", "whyItWorks": "string", "suggestedCaption": "string" },
     { "startTimestamp": "string", "endTimestamp": "string", "whyItWorks": "string", "suggestedCaption": "string" }
   ],
-  "suggestedTags": ["string", "string", "string", "string", "string", "string", "string", "string"]
+  "suggestedTags": ["string", "string", "string", "string", "string", "string", "string", "string"],
+  "thumbnailRecommendation": {
+    "currentStrengths": "string (1-2 sentences — what's working in the current thumbnail)",
+    "currentWeaknesses": "string (1-2 sentences — what's weak or could be stronger)",
+    "overlayText": "string (under 5 words, the text overlay that would lift CTR)",
+    "compositionNotes": "string (alternative framing or composition suggestion, 1-2 sentences)",
+    "moodDirection": "string (the emotional tone the thumbnail should evoke — one phrase)"
+  }
 }`;
 
   return { system, user };

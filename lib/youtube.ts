@@ -41,6 +41,7 @@ export async function fetchVideoMeta(videoId: string): Promise<VideoMeta> {
         tags?: string[];
         publishedAt: string;
         channelTitle: string;
+        thumbnails?: Record<string, { url: string; width: number; height: number }>;
       };
       contentDetails: { duration: string };
     }>;
@@ -48,6 +49,14 @@ export async function fetchVideoMeta(videoId: string): Promise<VideoMeta> {
   const item = data.items?.[0];
   if (!item) throw new Error("Video not found or private");
   const durationSeconds = parseIsoDuration(item.contentDetails.duration);
+  const thumbs = item.snippet.thumbnails || {};
+  const thumbnailUrl =
+    thumbs.maxres?.url ||
+    thumbs.standard?.url ||
+    thumbs.high?.url ||
+    thumbs.medium?.url ||
+    thumbs.default?.url ||
+    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
   return {
     videoId,
     title: item.snippet.title,
@@ -57,7 +66,26 @@ export async function fetchVideoMeta(videoId: string): Promise<VideoMeta> {
     durationSeconds,
     publishedAt: item.snippet.publishedAt,
     channelTitle: item.snippet.channelTitle,
+    thumbnailUrl,
   };
+}
+
+export async function fetchThumbnailAsBase64(
+  thumbnailUrl: string
+): Promise<{ mediaType: "image/jpeg" | "image/png" | "image/webp"; data: string }> {
+  const resp = await fetch(thumbnailUrl);
+  if (!resp.ok) {
+    // Fallback to the hqdefault which usually always exists
+    throw new Error(`Failed to fetch thumbnail (${resp.status})`);
+  }
+  const contentType = resp.headers.get("content-type") || "image/jpeg";
+  const buf = Buffer.from(await resp.arrayBuffer());
+  const mediaType: "image/jpeg" | "image/png" | "image/webp" = contentType.includes("png")
+    ? "image/png"
+    : contentType.includes("webp")
+    ? "image/webp"
+    : "image/jpeg";
+  return { mediaType, data: buf.toString("base64") };
 }
 
 export async function fetchTranscript(videoId: string): Promise<string> {

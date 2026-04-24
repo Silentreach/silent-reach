@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generatePostUpload } from "@/lib/claude";
-import { extractVideoId, fetchVideoMeta, fetchTranscript } from "@/lib/youtube";
+import {
+  extractVideoId,
+  fetchVideoMeta,
+  fetchTranscript,
+  fetchThumbnailAsBase64,
+} from "@/lib/youtube";
 
 const InputSchema = z.object({
   youtubeUrl: z.string().min(5),
   audienceOverride: z.string().optional(),
   locationOverride: z.string().optional(),
+  visualContext: z.string().optional(),
   manualTranscript: z.string().optional(),
 });
 
@@ -27,6 +33,7 @@ export async function POST(req: NextRequest) {
       youtubeUrl,
       audienceOverride,
       locationOverride,
+      visualContext,
       manualTranscript,
     } = parsed.data;
 
@@ -38,46 +45,52 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch metadata + transcript in parallel
-    const metaPromise = fetchVideoMeta(videoId);
-    const transcriptPromise = manualTranscript
-      ? Promise.resolve(manualTranscript)
-      : fetchTranscript(videoId);
-
+    // Fetch metadata (required)
     let meta;
     try {
-      meta = await metaPromise;
+      meta = await fetchVideoMeta(videoId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "YouTube metadata error";
       return NextResponse.json({ error: msg }, { status: 502 });
     }
 
-    let transcript: string;
-    try {
-      transcript = await transcriptPromise;
-    } catch (err: unknown) {
-      if (manualTranscript) {
-        const msg =
-          err instanceof Error ? err.message : "Manual transcript error";
-        return NextResponse.json({ error: msg }, { status: 500 });
+    // Fetch transcript (optional — silently skip if not available)
+    let transcript = "";
+    if (manualTranscript && manualTranscript.trim().length > 0) {
+      transcript = manualTranscript.trim();
+    } else {
+      try {
+        transcript = await fetchTranscript(videoId);
+      } catch {
+        transcript = ""; // No transcript available — that's fine
       }
-      return NextResponse.json(
-        {
-          error:
-            "Transcript not found. Please paste the transcript manually and try again.",
-          needManualTranscript: true,
-          meta,
-        },
-        { status: 422 }
-      );
     }
 
-    const pack = await generatePostUpload(meta, transcript, {
-      audience: audienceOverride,
-      location: locationOverride,
-    });
+    // Fetch thumbnail as base64 for Claude Vision (optional — if it fails, proceed without)
+    let thumbnailImage;
+    try {
+      thumbnailImage = await fetchThumbnailAsBase64(meta.thumbnailUrl);
+    } catch {
+      thumbnailImage = undefined;
+    }
 
-    return NextResponse.json({ meta, pack });
+    const pack = await generatePostUpload(
+      meta,
+      transcript,
+      {
+        audience: audienceOverride,
+        location: locationOverride,
+        visualContext,
+      },
+      thumbnailImage
+    );
+
+    return NextResponse.json({
+      meta,
+      pack,
+      transcriptUsed: transcript.length > 0,
+      thumbnailUsed: !!thumbnailImage,
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown server error";
     return NextResponse.json({ error: msg }, { status: 500 });

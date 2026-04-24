@@ -9,9 +9,8 @@ import type {
   VideoMeta,
 } from "@/types";
 
-const MODEL = "claude-sonnet-4-5"; // Update to "claude-sonnet-4-5-20250929" or newer if this ID is deprecated. Check https://docs.anthropic.com/en/docs/about-claude/models
+const MODEL = "claude-sonnet-4-5"; // Update if Anthropic deprecates this ID. Check https://docs.anthropic.com/en/docs/about-claude/models
 
-// Schemas for runtime validation
 const PreShootOutputSchema = z.object({
   hooks: z
     .array(
@@ -48,19 +47,9 @@ const PostUploadOutputSchema = z.object({
   facebookPost: z.string(),
   titleVariants: z.array(z.string()).min(3),
   hookRewrites: z
-    .array(
-      z.object({
-        line: z.string(),
-        worksBestFor: z.string(),
-      })
-    )
+    .array(z.object({ line: z.string(), worksBestFor: z.string() }))
     .min(1),
-  chapterMarkers: z.array(
-    z.object({
-      timestamp: z.string(),
-      title: z.string(),
-    })
-  ),
+  chapterMarkers: z.array(z.object({ timestamp: z.string(), title: z.string() })),
   shareableClips: z
     .array(
       z.object({
@@ -72,29 +61,58 @@ const PostUploadOutputSchema = z.object({
     )
     .min(1),
   suggestedTags: z.array(z.string()),
+  thumbnailRecommendation: z.object({
+    currentStrengths: z.string(),
+    currentWeaknesses: z.string(),
+    overlayText: z.string(),
+    compositionNotes: z.string(),
+    moodDirection: z.string(),
+  }),
 });
 
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set in environment");
-  }
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set in environment");
   return new Anthropic({ apiKey });
 }
 
-async function callClaude(system: string, user: string): Promise<string> {
+type ImageContent = {
+  mediaType: "image/jpeg" | "image/png" | "image/webp";
+  data: string;
+};
+
+async function callClaude(
+  system: string,
+  user: string,
+  image?: ImageContent
+): Promise<string> {
   const client = getClient();
+  type ImageBlock = {
+    type: "image";
+    source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/webp"; data: string };
+  };
+  type TextBlock = { type: "text"; text: string };
+  const userContent: (ImageBlock | TextBlock)[] = [];
+  if (image) {
+    userContent.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: image.mediaType,
+        data: image.data,
+      },
+    });
+  }
+  userContent.push({ type: "text", text: user });
   const resp = await client.messages.create({
     model: MODEL,
     max_tokens: 4000,
     temperature: 0.7,
     system,
-    messages: [{ role: "user", content: user }],
+    messages: [{ role: "user", content: userContent }],
   });
   const block = resp.content[0];
-  if (block.type !== "text") {
-    throw new Error("Unexpected Claude response type");
-  }
+  if (block.type !== "text") throw new Error("Unexpected Claude response type");
   return block.text;
 }
 
@@ -110,10 +128,11 @@ export async function generatePreShoot(
 export async function generatePostUpload(
   meta: VideoMeta,
   transcript: string,
-  overrides: { audience?: string; location?: string }
+  overrides: { audience?: string; location?: string; visualContext?: string },
+  thumbnailImage?: ImageContent
 ): Promise<PostUploadOutput> {
   const { system, user } = buildPostUploadPrompt(meta, transcript, overrides);
-  const raw = await callClaude(system, user);
+  const raw = await callClaude(system, user, thumbnailImage);
   const json = extractJson(raw);
   return PostUploadOutputSchema.parse(json) as PostUploadOutput;
 }

@@ -10,6 +10,7 @@ type Tab =
   | "facebook"
   | "titles"
   | "hooks"
+  | "thumbnail"
   | "chapters"
   | "clips"
   | "tags";
@@ -20,8 +21,9 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "facebook", label: "Facebook" },
   { id: "titles", label: "Titles" },
   { id: "hooks", label: "Hook Rewrites" },
-  { id: "chapters", label: "Chapters" },
+  { id: "thumbnail", label: "Thumbnail" },
   { id: "clips", label: "Clips" },
+  { id: "chapters", label: "Chapters" },
   { id: "tags", label: "Tags" },
 ];
 
@@ -40,12 +42,22 @@ export default function PackResult({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-border bg-surface p-4">
-        <div className="text-xs text-muted">Video</div>
-        <div className="mt-0.5 font-medium">{meta.title}</div>
-        <div className="mt-1 text-xs text-muted">
-          {meta.channelTitle} · {Math.floor(meta.durationSeconds / 60)}m{" "}
-          {meta.durationSeconds % 60}s
+      <div className="flex gap-4 rounded-lg border border-border bg-surface p-4">
+        {meta.thumbnailUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={meta.thumbnailUrl}
+            alt=""
+            className="h-24 w-auto rounded border border-border object-cover"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="text-xs text-muted">Video</div>
+          <div className="mt-0.5 truncate font-medium">{meta.title}</div>
+          <div className="mt-1 text-xs text-muted">
+            {meta.channelTitle} · {Math.floor(meta.durationSeconds / 60)}m{" "}
+            {meta.durationSeconds % 60}s
+          </div>
         </div>
       </div>
 
@@ -110,6 +122,46 @@ export default function PackResult({
               </li>
             ))}
           </ul>
+        )}
+
+        {tab === "thumbnail" && (
+          <div className="grid gap-4 md:grid-cols-[1fr_1.4fr]">
+            {meta.thumbnailUrl && (
+              <div className="rounded-lg border border-border bg-surface p-3">
+                <div className="mb-2 text-xs text-muted">Current thumbnail</div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={meta.thumbnailUrl}
+                  alt=""
+                  className="w-full rounded border border-border"
+                />
+              </div>
+            )}
+            <div className="space-y-3">
+              <Block
+                label="What's working"
+                text={pack.thumbnailRecommendation.currentStrengths}
+              />
+              <Block
+                label="What could be stronger"
+                text={pack.thumbnailRecommendation.currentWeaknesses}
+              />
+              <Block
+                label="Suggested overlay text"
+                text={`"${pack.thumbnailRecommendation.overlayText}"`}
+                highlight
+                copyText={pack.thumbnailRecommendation.overlayText}
+              />
+              <Block
+                label="Composition direction"
+                text={pack.thumbnailRecommendation.compositionNotes}
+              />
+              <Block
+                label="Mood"
+                text={pack.thumbnailRecommendation.moodDirection}
+              />
+            </div>
+          </div>
         )}
 
         {tab === "chapters" && (
@@ -190,6 +242,45 @@ function TextBlock({ text, label }: { text: string; label: string }) {
       <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
         {text}
       </pre>
+    </div>
+  );
+}
+
+function Block({
+  label,
+  text,
+  highlight,
+  copyText,
+}: {
+  label: string;
+  text: string;
+  highlight?: boolean;
+  copyText?: string;
+}) {
+  return (
+    <div
+      className={
+        "rounded-lg border p-3 " +
+        (highlight
+          ? "border-gold/40 bg-gold/5"
+          : "border-border bg-surface")
+      }
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+            {label}
+          </div>
+          <div
+            className={
+              "mt-1 text-sm " + (highlight ? "text-gold font-medium" : "")
+            }
+          >
+            {text}
+          </div>
+        </div>
+        {copyText && <CopyButton text={copyText} />}
+      </div>
     </div>
   );
 }
