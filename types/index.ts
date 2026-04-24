@@ -1,0 +1,111 @@
+export type ContentType =
+  | "listing_tour"
+  | "renovation_walkthrough"
+  | "before_after"
+  | "contractor_feature"
+  | "explainer"
+  | "other";
+
+export type Platform = "instagram" | "youtube" | "youtube_shorts" | "linkedin" | "all";
+
+export type VideoLength = "15s" | "30s" | "60s" | "90s" | "3-5min" | "5-10min";
+
+export interface PreShootInput {
+  contentType: ContentType;
+  targetAudience: string;
+  location: string;
+  videoLength: VideoLength;
+  platform: Platform;
+  concept: string;
+  details?: string;
+}
+
+export interface Hook {
+  type: "curiosity" | "contrarian" | "stakes";
+  line: string;
+  whyItWorks: string;
+}
+
+export interface ShotListItem {
+  timestamp: string;
+  shot: string;
+  retentionNote?: string;
+}
+
+export interface ThumbnailDirection {
+  momentTimestamp: string;
+  overlayText: string;
+  emotionalTone: string;
+}
+
+export interface PreShootOutput {
+  hooks: Hook[];
+  shotList: ShotListItem[];
+  titleOptions: string[];
+  thumbnailDirection: ThumbnailDirection;
+  pitch: string;
+  localRelevanceNotes: string[];
+}
+
+export interface PostUploadInput {
+  youtubeUrl: string;
+  audienceOverride?: string;
+  locationOverride?: string;
+  manualTranscript?: string;
+}
+
+export interface HookRewrite {
+  line: string;
+  worksBestFor: string;
+}
+
+export interface ChapterMarker {
+  timestamp: string;
+  title: string;
+}
+
+export interface ShareableClip {
+  startTimestamp: string;
+  endTimestamp: string;
+  whyItWorks: string;
+  suggestedCaption: string;
+}
+
+export interface PostUploadOutput {
+  instagramCaption: string;
+  linkedInPost: string;
+  facebookPost: string;
+  titleVariants: string[];
+  hookRewrites: HookRewrite[];
+  chapterMarkers: ChapterMarker[];
+  shareableClips: ShareableClip[];
+  suggestedTags: string[];
+}
+
+export interface VideoMeta {
+  videoId: string;
+  title: string;
+  description: string;
+  tags: string[];
+  duration: string;
+  durationSeconds: number;
+  publishedAt: string;
+  channelTitle: string;
+}
+
+export type HistoryItem =
+  | {
+      kind: "brief";
+      id: string;
+      createdAt: string;
+      input: PreShootInput;
+      output: PreShootOutput;
+    }
+  | {
+      kind: "pack";
+      id: string;
+      createdAt: string;
+      input: PostUploadInput;
+      meta: VideoMeta;
+      output: PostUploadOutput;
+    };
