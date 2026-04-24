@@ -79,7 +79,7 @@ Hard rules:
 - Chapter markers: ONLY generate if (a) the video is longer than 90 seconds AND (b) a transcript is provided with meaningful content. Otherwise return an empty array.
 - Shareable clips: suggest 3 moments (10-20 second ranges) the creator could export as a Reel. For voice-less videos, suggest based on typical real estate reel structure (opening establishing shot, mid-film hero reveal, final payoff) expressed as timestamp ranges. Always provide 3.
 - Suggested tags: 8-12 tags, lowercase, no "#" symbol.
-- Thumbnail recommendation: look at the attached thumbnail image. Describe what's working, what's not, suggest a 3-word overlay text, suggest an alternative composition, and name the mood the thumbnail should evoke. Be specific — reference actual visual elements you see.
+- Thumbnail recommendation: look at the attached thumbnail image and suggest an upgrade that a designer could execute in Figma/Photoshop/Canva in 10 minutes. Cover: (a) what's currently working, (b) what's weak, (c) a 3-5 word overlay text, (d) alternative composition, (e) mood, (f) TYPOGRAPHY — specific font family (e.g. "Playfair Display Black" or "Barlow Condensed SemiBold"), weight + case (e.g. "All caps with 50 letter-spacing"), text color + treatment (e.g. "Off-white #F5F2E8 with 1px dark stroke and 12% opacity drop shadow"), and positioning (e.g. "Bottom-left third, 8% padding from edges"), (g) DESIGN — a 2-4 color palette as HEX codes (e.g. ["#0A1E2C", "#D4AF37", "#F5F2E8"]), background treatment (e.g. "Soft bottom-to-top vignette from black to transparent over the hero shot"), accent elements (small graphical touches like a thin gold underline, a location pin icon, or none), and aspect notes (YouTube 16:9 main thumbnail vs crop for Shorts). For Silent Story specifically, default to editorial real-estate aesthetics: serif display fonts (Playfair, Cormorant, Bodoni) OR impact condensed sans (Barlow Condensed, Bebas Neue), generous letter-spacing, warm off-white or gold text over darkened hero shot, two-tone palette anchored to Silent Story's gold #D4AF37 and a deep neutral. Never suggest generic "bold yellow text" without a specific named font and hex.
 - Return strict JSON matching the schema. No prose outside the JSON. No markdown fences.`;
 
   const audience =
@@ -137,9 +137,21 @@ Return only valid JSON matching this exact schema:
   "thumbnailRecommendation": {
     "currentStrengths": "string (1-2 sentences — what's working in the current thumbnail)",
     "currentWeaknesses": "string (1-2 sentences — what's weak or could be stronger)",
-    "overlayText": "string (under 5 words, the text overlay that would lift CTR)",
+    "overlayText": "string (3-5 words, the exact text overlay that would lift CTR)",
     "compositionNotes": "string (alternative framing or composition suggestion, 1-2 sentences)",
-    "moodDirection": "string (the emotional tone the thumbnail should evoke — one phrase)"
+    "moodDirection": "string (the emotional tone the thumbnail should evoke — one phrase)",
+    "typography": {
+      "fontFamily": "string (specific named font with weight variant, e.g. 'Playfair Display Black' or 'Barlow Condensed SemiBold')",
+      "weightAndCase": "string (e.g. 'All caps, 50 letter-spacing, 72pt')",
+      "colorAndTreatment": "string (e.g. 'Off-white #F5F2E8 with 1px dark stroke and 12% opacity drop shadow')",
+      "positioning": "string (e.g. 'Bottom-left third, 8% padding from left and bottom edges')"
+    },
+    "design": {
+      "colorPalette": ["#hex1", "#hex2", "#hex3"],
+      "backgroundTreatment": "string (how to handle the hero image behind the text, e.g. 'Soft bottom-to-top vignette from black to transparent, -10 exposure on bottom third to let text breathe')",
+      "accentElements": "string (small design touches, or 'none' if the photography should carry it alone)",
+      "aspectNotes": "string (e.g. '16:9 for YouTube main thumbnail; consider center-weighted crop for IG Reel cover')"
+    }
   }
 }`;
 

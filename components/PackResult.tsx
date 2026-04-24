@@ -125,41 +125,133 @@ export default function PackResult({
         )}
 
         {tab === "thumbnail" && (
-          <div className="grid gap-4 md:grid-cols-[1fr_1.4fr]">
-            {meta.thumbnailUrl && (
-              <div className="rounded-lg border border-border bg-surface p-3">
-                <div className="mb-2 text-xs text-muted">Current thumbnail</div>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={meta.thumbnailUrl}
-                  alt=""
-                  className="w-full rounded border border-border"
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-[1fr_1.4fr]">
+              {meta.thumbnailUrl && (
+                <div className="rounded-lg border border-border bg-surface p-3">
+                  <div className="mb-2 text-xs text-muted">Current thumbnail</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={meta.thumbnailUrl}
+                    alt=""
+                    className="w-full rounded border border-border"
+                  />
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {pack.thumbnailRecommendation.design.colorPalette.map(
+                      (hex, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-1.5 rounded border border-border bg-bg/50 px-2 py-1"
+                        >
+                          <span
+                            className="h-4 w-4 rounded border border-border"
+                            style={{ background: hex }}
+                          />
+                          <span className="font-mono text-[10px] text-muted">
+                            {hex}
+                          </span>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-3">
+                <Block
+                  label="What's working"
+                  text={pack.thumbnailRecommendation.currentStrengths}
+                />
+                <Block
+                  label="What could be stronger"
+                  text={pack.thumbnailRecommendation.currentWeaknesses}
+                />
+                <Block
+                  label="Suggested overlay text"
+                  text={`"${pack.thumbnailRecommendation.overlayText}"`}
+                  highlight
+                  copyText={pack.thumbnailRecommendation.overlayText}
+                />
+                <Block
+                  label="Composition direction"
+                  text={pack.thumbnailRecommendation.compositionNotes}
+                />
+                <Block
+                  label="Mood"
+                  text={pack.thumbnailRecommendation.moodDirection}
                 />
               </div>
-            )}
-            <div className="space-y-3">
-              <Block
-                label="What's working"
-                text={pack.thumbnailRecommendation.currentStrengths}
-              />
-              <Block
-                label="What could be stronger"
-                text={pack.thumbnailRecommendation.currentWeaknesses}
-              />
-              <Block
-                label="Suggested overlay text"
-                text={`"${pack.thumbnailRecommendation.overlayText}"`}
-                highlight
-                copyText={pack.thumbnailRecommendation.overlayText}
-              />
-              <Block
-                label="Composition direction"
-                text={pack.thumbnailRecommendation.compositionNotes}
-              />
-              <Block
-                label="Mood"
-                text={pack.thumbnailRecommendation.moodDirection}
-              />
+            </div>
+
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wider text-gold">
+                  Typography
+                </div>
+                <CopyButton
+                  label="Copy typography spec"
+                  text={`Font: ${pack.thumbnailRecommendation.typography.fontFamily}
+Weight / Case: ${pack.thumbnailRecommendation.typography.weightAndCase}
+Color & Treatment: ${pack.thumbnailRecommendation.typography.colorAndTreatment}
+Positioning: ${pack.thumbnailRecommendation.typography.positioning}`}
+                />
+              </div>
+              <dl className="grid gap-3 text-sm md:grid-cols-2">
+                <SpecRow
+                  label="Font family"
+                  value={pack.thumbnailRecommendation.typography.fontFamily}
+                />
+                <SpecRow
+                  label="Weight / case"
+                  value={pack.thumbnailRecommendation.typography.weightAndCase}
+                />
+                <SpecRow
+                  label="Color + treatment"
+                  value={
+                    pack.thumbnailRecommendation.typography.colorAndTreatment
+                  }
+                />
+                <SpecRow
+                  label="Positioning"
+                  value={pack.thumbnailRecommendation.typography.positioning}
+                />
+              </dl>
+            </div>
+
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wider text-gold">
+                  Design &amp; palette
+                </div>
+                <CopyButton
+                  label="Copy design spec"
+                  text={`Palette: ${pack.thumbnailRecommendation.design.colorPalette.join(", ")}
+Background: ${pack.thumbnailRecommendation.design.backgroundTreatment}
+Accent elements: ${pack.thumbnailRecommendation.design.accentElements}
+Aspect: ${pack.thumbnailRecommendation.design.aspectNotes}`}
+                />
+              </div>
+              <dl className="grid gap-3 text-sm md:grid-cols-2">
+                <SpecRow
+                  label="Background treatment"
+                  value={
+                    pack.thumbnailRecommendation.design.backgroundTreatment
+                  }
+                />
+                <SpecRow
+                  label="Accent elements"
+                  value={pack.thumbnailRecommendation.design.accentElements}
+                />
+                <SpecRow
+                  label="Aspect / crop notes"
+                  value={pack.thumbnailRecommendation.design.aspectNotes}
+                />
+                <SpecRow
+                  label="Color palette"
+                  value={pack.thumbnailRecommendation.design.colorPalette.join(
+                    " · "
+                  )}
+                />
+              </dl>
             </div>
           </div>
         )}
@@ -242,6 +334,17 @@ function TextBlock({ text, label }: { text: string; label: string }) {
       <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
         {text}
       </pre>
+    </div>
+  );
+}
+
+function SpecRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+        {label}
+      </dt>
+      <dd className="mt-1 leading-relaxed">{value}</dd>
     </div>
   );
 }

@@ -67,6 +67,18 @@ const PostUploadOutputSchema = z.object({
     overlayText: z.string(),
     compositionNotes: z.string(),
     moodDirection: z.string(),
+    typography: z.object({
+      fontFamily: z.string(),
+      weightAndCase: z.string(),
+      colorAndTreatment: z.string(),
+      positioning: z.string(),
+    }),
+    design: z.object({
+      colorPalette: z.array(z.string()).min(2),
+      backgroundTreatment: z.string(),
+      accentElements: z.string(),
+      aspectNotes: z.string(),
+    }),
   }),
 });
 

@@ -55,12 +55,28 @@ export interface PostUploadInput {
   manualTranscript?: string;
 }
 
+export interface ThumbnailTypography {
+  fontFamily: string;
+  weightAndCase: string;
+  colorAndTreatment: string;
+  positioning: string;
+}
+
+export interface ThumbnailDesign {
+  colorPalette: string[];
+  backgroundTreatment: string;
+  accentElements: string;
+  aspectNotes: string;
+}
+
 export interface ThumbnailRecommendation {
   currentStrengths: string;
   currentWeaknesses: string;
   overlayText: string;
   compositionNotes: string;
   moodDirection: string;
+  typography: ThumbnailTypography;
+  design: ThumbnailDesign;
 }
 
 export interface HookRewrite {
