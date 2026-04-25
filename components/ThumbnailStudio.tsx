@@ -14,6 +14,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { toPng } from "html-to-image";
+import { getBrandKit } from "@/lib/userContext";
 
 /* ------------------------------------------------------------------ */
 /*  TYPES + CONSTANTS                                                  */
@@ -383,10 +384,21 @@ export default function ThumbnailStudio() {
   const [headline, setHeadline] = useState("Inside a Quiet Oak Bay Reno");
   const [subtitle, setSubtitle] = useState("Victoria, BC");
   const [brand, setBrand] = useState("Silent Story");
+  const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null);
+  // Hydrate from saved brand kit on mount — overrides the placeholder if user has set one.
   const [showChrome, setShowChrome] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Pre-fill brand kit on mount so users stop retyping their brand on every download.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useMemo(() => {
+    if (typeof window === "undefined") return;
+    const kit = getBrandKit();
+    if (kit.name) setBrand(kit.name);
+    if (kit.logoDataUrl) setBrandLogoUrl(kit.logoDataUrl);
+  }, []);
   const exportRef = useRef<HTMLDivElement>(null);
   const note = useMemo(pickRoadmapNote, []);
 

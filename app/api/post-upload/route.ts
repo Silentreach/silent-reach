@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generatePostUpload } from "@/lib/claude";
+
+const UserContextSchema = z
+  .object({
+    voiceSamples: z.array(z.string()).max(8).optional(),
+    voiceNotes: z.string().max(2000).optional(),
+    brand: z
+      .object({
+        name: z.string().max(80).optional(),
+        tagline: z.string().max(160).optional(),
+        primaryColor: z.string().max(20).optional(),
+        secondaryColor: z.string().max(20).optional(),
+      })
+      .optional(),
+  })
+  .optional();
 import {
   extractVideoId,
   fetchVideoMeta,
@@ -22,7 +37,8 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const parsed = InputSchema.safeParse(body);
+    const candidate = body && typeof body === "object" && "input" in body ? body.input : body;
+    const parsed = InputSchema.safeParse(candidate);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Invalid input", details: parsed.error.flatten() },
@@ -36,6 +52,8 @@ export async function POST(req: NextRequest) {
       visualContext,
       manualTranscript,
     } = parsed.data;
+    const ctxParsed = UserContextSchema.safeParse(body && typeof body === "object" ? body.userContext : undefined);
+    const ctx = ctxParsed.success ? ctxParsed.data : undefined;
 
     const videoId = extractVideoId(youtubeUrl);
     if (!videoId) {
@@ -82,7 +100,8 @@ export async function POST(req: NextRequest) {
         location: locationOverride,
         visualContext,
       },
-      thumbnailImage
+      thumbnailImage,
+      ctx
     );
 
     return NextResponse.json({

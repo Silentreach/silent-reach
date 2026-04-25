@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import BriefResult from "@/components/BriefResult";
 import { addToHistory } from "@/lib/storage";
+import { getUserContext } from "@/lib/userContext";
 import { newId } from "@/lib/utils";
 import type { PreShootInput, PreShootOutput } from "@/types";
 
@@ -39,7 +40,7 @@ export default function PreShootPage() {
       const res = await fetch("/api/pre-shoot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ input, userContext: getUserContext() }),
       });
       const data = await res.json();
       if (!res.ok) {

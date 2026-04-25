@@ -136,3 +136,19 @@ export type HistoryItem =
       meta: VideoMeta;
       output: PostUploadOutput;
     };
+
+/* ───────── User context (voice + brand kit) ─────────
+   Stored in browser localStorage. Sent to API on each generation
+   so prompts can match the user's voice and brand identity. */
+
+export interface UserContext {
+  voiceSamples?: string[];           // 0–8 short captions/hooks the user wrote
+  voiceNotes?: string;               // free-form rules ("never use 'elevated'")
+  brand?: {
+    name?: string;
+    tagline?: string;
+    primaryColor?: string;           // hex e.g. #d4af37
+    secondaryColor?: string;
+    logoDataUrl?: string;            // small data URL (resized)
+  };
+}

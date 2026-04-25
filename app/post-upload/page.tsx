@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import PackResult from "@/components/PackResult";
 import { addToHistory } from "@/lib/storage";
+import { getUserContext } from "@/lib/userContext";
 import { newId } from "@/lib/utils";
 import type {
   PostUploadInput,
@@ -43,7 +44,7 @@ export default function PostUploadPage() {
       const res = await fetch("/api/post-upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ input: body, userContext: getUserContext() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);

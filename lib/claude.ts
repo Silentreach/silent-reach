@@ -6,6 +6,7 @@ import type {
   PreShootInput,
   PreShootOutput,
   PostUploadOutput,
+  UserContext,
   VideoMeta,
 } from "@/types";
 
@@ -129,9 +130,10 @@ async function callClaude(
 }
 
 export async function generatePreShoot(
-  input: PreShootInput
+  input: PreShootInput,
+  ctx?: UserContext
 ): Promise<PreShootOutput> {
-  const { system, user } = buildPreShootPrompt(input);
+  const { system, user } = buildPreShootPrompt(input, ctx);
   const raw = await callClaude(system, user);
   const json = extractJson(raw);
   return PreShootOutputSchema.parse(json) as PreShootOutput;
@@ -141,9 +143,10 @@ export async function generatePostUpload(
   meta: VideoMeta,
   transcript: string,
   overrides: { audience?: string; location?: string; visualContext?: string },
-  thumbnailImage?: ImageContent
+  thumbnailImage?: ImageContent,
+  ctx?: UserContext
 ): Promise<PostUploadOutput> {
-  const { system, user } = buildPostUploadPrompt(meta, transcript, overrides);
+  const { system, user } = buildPostUploadPrompt(meta, transcript, overrides, ctx);
   const raw = await callClaude(system, user, thumbnailImage);
   const json = extractJson(raw);
   return PostUploadOutputSchema.parse(json) as PostUploadOutput;

@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generatePreShoot } from "@/lib/claude";
 
+const UserContextSchema = z
+  .object({
+    voiceSamples: z.array(z.string()).max(8).optional(),
+    voiceNotes: z.string().max(2000).optional(),
+    brand: z
+      .object({
+        name: z.string().max(80).optional(),
+        tagline: z.string().max(160).optional(),
+        primaryColor: z.string().max(20).optional(),
+        secondaryColor: z.string().max(20).optional(),
+      })
+      .optional(),
+  })
+  .optional();
+
 const InputSchema = z.object({
   contentType: z.enum([
     "listing_tour",
@@ -25,14 +40,18 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const parsed = InputSchema.safeParse(body);
+    // Accept either flat input (legacy) or { input, userContext } envelope.
+    const candidate = body && typeof body === "object" && "input" in body ? body.input : body;
+    const parsed = InputSchema.safeParse(candidate);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Invalid input", details: parsed.error.flatten() },
         { status: 400 }
       );
     }
-    const output = await generatePreShoot(parsed.data);
+    const ctxParsed = UserContextSchema.safeParse(body && typeof body === "object" ? body.userContext : undefined);
+    const ctx = ctxParsed.success ? ctxParsed.data : undefined;
+    const output = await generatePreShoot(parsed.data, ctx);
     return NextResponse.json({ output });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown server error";
