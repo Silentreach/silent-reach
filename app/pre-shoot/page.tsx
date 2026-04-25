@@ -66,7 +66,7 @@ export default function PreShootPage() {
       <header>
         <h1 className="text-2xl font-semibold">Pre-Shoot Brief</h1>
         <p className="mt-1 text-sm text-muted">
-          Fill in the concept. Silent Reach returns a hook, shot list, title
+          Fill in the concept. Mintflow returns a hook, shot list, title
           options, thumbnail direction, and retention plan.
         </p>
       </header>

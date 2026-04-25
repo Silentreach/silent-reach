@@ -2,10 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght,SOFT@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&display=swap");
 
 :root {
   color-scheme: dark;
+  --gold: #d4af37;
+  --gold-light: #e8c764;
 }
 
 html,
@@ -13,20 +15,60 @@ body {
   background: #0a0a0a;
   color: #f5f5f5;
   font-family: "Inter", system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
   box-sizing: border-box;
 }
 
+::selection {
+  background: rgba(212, 175, 55, 0.35);
+  color: #fff;
+}
+
+/* Refined gold divider with center fade */
 .gold-divider {
   height: 1px;
   background: linear-gradient(90deg, transparent, #d4af37, transparent);
 }
 
+/* Premium hero gradient — subtle warm radial behind hero copy */
+.hero-glow {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(212, 175, 55, 0.10), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(212, 175, 55, 0.04), transparent 60%);
+}
+
+/* Subtle grain texture for depth — tiny SVG noise data URL */
+.grain {
+  position: relative;
+}
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.83 0 0 0 0 0.69 0 0 0 0 0.22 0 0 0 0.22 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+}
+
+/* Premium serif display lockup — subtle gold gradient on display headlines */
+.display-gradient {
+  background: linear-gradient(180deg, #fff 0%, #f5efe7 70%, #d4af37 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Form controls */
 textarea,
-input,
+input[type="text"],
+input[type="url"],
+input[type="email"],
 select {
   background: #141414;
   border: 1px solid #2a2a2a;
@@ -35,7 +77,7 @@ select {
   border-radius: 0.5rem;
   font-size: 0.9375rem;
   width: 100%;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 textarea:focus,
@@ -43,6 +85,7 @@ input:focus,
 select:focus {
   outline: none;
   border-color: #d4af37;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
 }
 
 select {
@@ -54,20 +97,45 @@ button {
   font-family: inherit;
 }
 
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #0a0a0a;
+  background: #050505;
 }
-
 ::-webkit-scrollbar-thumb {
   background: #2a2a2a;
   border-radius: 5px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: #3a3a3a;
+}
+
+/* Pillar card hover glow */
+.pillar-card {
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s ease, transform 0.3s ease;
+}
+.pillar-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background: radial-gradient(
+    400px circle at var(--mx, 50%) var(--my, 0%),
+    rgba(212, 175, 55, 0.10),
+    transparent 40%
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.pillar-card:hover::before {
+  opacity: 1;
+}
+.pillar-card:hover {
+  border-color: rgba(212, 175, 55, 0.5);
+  transform: translateY(-2px);
 }

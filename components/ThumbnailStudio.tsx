@@ -92,12 +92,12 @@ const ROADMAP_NOTES: { title: string; body: string; sellable: string }[] = [
   {
     title: "TikTok cover + hook overlay",
     body: "TikTok-specific 1080x1920 cover with a separate 'in-feed hook frame' overlay timed to the first second.",
-    sellable: "TikTok-first creators are an untapped buyer segment for Silent Reach.",
+    sellable: "TikTok-first creators are an untapped buyer segment for Mintflow.",
   },
   {
     title: "Caption + Thumbnail bundle (cross-mode)",
     body: "Wire Thumbnail Studio into Post-Upload Pack so the same headline flows into IG/FB/LinkedIn captions.",
-    sellable: "The 'all-in-one' moat — only Silent Reach makes the thumbnail and the captions agree.",
+    sellable: "The 'all-in-one' moat — only Mintflow makes the thumbnail and the captions agree.",
   },
   {
     title: "A/B thumbnail tester",
@@ -106,7 +106,7 @@ const ROADMAP_NOTES: { title: string; body: string; sellable: string }[] = [
   },
   {
     title: "Realtor white-label workspace",
-    body: "Each invited realtor gets a sub-brand kit and pays you monthly. Silent Reach becomes a SaaS, not just a tool.",
+    body: "Each invited realtor gets a sub-brand kit and pays you monthly. Mintflow becomes a SaaS, not just a tool.",
     sellable: "$29/mo per realtor seat. Pitch to 5 Victoria realtors = $145 MRR floor.",
   },
 ];
@@ -423,7 +423,7 @@ export default function ThumbnailStudio() {
         backgroundColor: "#000000",
       });
       const link = document.createElement("a");
-      link.download = `silentreach_${preset}_${platform}.png`;
+      link.download = `mintflow_${preset}_${platform}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -689,7 +689,7 @@ export default function ThumbnailStudio() {
               fontWeight: 600,
             }}
           >
-            silentreach
+            mintflow
           </div>
         </div>
       </div>
