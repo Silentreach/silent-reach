@@ -19,6 +19,9 @@ export default function Header() {
           <Link href="/post-upload" className="hover:text-text transition">
             Post-Upload
           </Link>
+          <Link href="/thumbnail-studio" className="hover:text-text transition">
+            Thumbnail Studio
+          </Link>
           <Link href="/history" className="hover:text-text transition">
             History
           </Link>
