@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import CopyButton from "./CopyButton";
+import ThumbnailSuggestions from "./ThumbnailSuggestions";
 import type { PostUploadOutput, VideoMeta } from "@/types";
 
 type Tab =
@@ -125,7 +126,16 @@ export default function PackResult({
         )}
 
         {tab === "thumbnail" && (
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {meta.thumbnailUrl && (
+              <ThumbnailSuggestions
+                imageUrl={meta.thumbnailUrl}
+                overlayText={pack.thumbnailRecommendation.overlayText}
+                palette={pack.thumbnailRecommendation.design.colorPalette}
+                mood={pack.thumbnailRecommendation.moodDirection}
+                channelName={meta.channelTitle}
+              />
+            )}
             <div className="grid gap-4 md:grid-cols-[1fr_1.4fr]">
               {meta.thumbnailUrl && (
                 <div className="rounded-lg border border-border bg-surface p-3">
