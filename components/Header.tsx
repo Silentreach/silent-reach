@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
   { href: "/production",       label: "Production",  pillar: "prod" },
   { href: "/post-upload",      label: "Pack",        pillar: "post" },
   { href: "/thumbnail-studio", label: "Thumbnails",  pillar: "post" },
+  { href: "/pricing",          label: "Pricing"                },
 ];
 
 export default function Header() {

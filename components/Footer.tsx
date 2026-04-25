@@ -40,7 +40,10 @@ export default function Footer() {
       </div>
       <div className="border-t border-border/50">
         <div className="mx-auto flex max-w-6xl flex-col items-start gap-2 px-5 py-5 text-[12px] text-muted md:flex-row md:items-center md:justify-between">
-          <span>© {new Date().getFullYear()} Mintflow. Built in Victoria, BC.</span>
+          <span className="flex items-center gap-3">
+            <span>© {new Date().getFullYear()} Mintflow. Built in Victoria, BC.</span>
+            <Link href="/pricing" className="transition hover:text-gold">Pricing</Link>
+          </span>
           <span className="text-muted/70">Quiet content. Loud reach.</span>
         </div>
       </div>

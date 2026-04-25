@@ -12,15 +12,17 @@ import {
   Mic,
   Sun,
   Layers,
-  Share2,
+  Quote,
+  TrendingUp,
 } from "lucide-react";
+import EmailCapture from "@/components/EmailCapture";
 
 export default function Home() {
   return (
     <div className="-mt-10">
       {/* ============ HERO ============ */}
       <section className="hero-glow relative overflow-hidden">
-        <div className="mx-auto max-w-5xl px-5 pt-28 pb-32 text-center md:pt-36 md:pb-40">
+        <div className="mx-auto max-w-5xl px-5 pt-28 pb-20 text-center md:pt-36 md:pb-24">
           <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/5 px-3 py-1 text-[11px] uppercase tracking-[0.25em] text-gold animate-fade-up">
             <Sparkles className="h-3 w-3" />
             From design to distribution
@@ -33,7 +35,8 @@ export default function Home() {
           </h1>
 
           <p className="mx-auto mt-7 max-w-xl text-balance text-base leading-relaxed text-muted md:text-lg animate-fade-up">
-            The content production OS for creators who need to travel beyond their followers.
+            Mintflow is the content production OS for real estate, renovation, and
+            small-business video creators shipping three or more reels a week.
             One studio for the brief, the shoot, the cut, the cover, and the captions.
           </p>
 
@@ -42,18 +45,17 @@ export default function Home() {
               href="/pre-shoot"
               className="group inline-flex items-center gap-2 rounded-full bg-gold px-5 py-3 text-sm font-semibold text-black transition hover:bg-gold-light"
             >
-              Start a project
+              Start free
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
             <Link
-              href="/thumbnail-studio"
+              href="/pricing"
               className="inline-flex items-center gap-2 rounded-full border border-border-strong px-5 py-3 text-sm text-text transition hover:border-gold/60 hover:text-gold"
             >
-              See the studio
+              See pricing
             </Link>
           </div>
 
-          {/* Mark watermark behind hero, very subtle */}
           <div
             aria-hidden
             className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[640px] w-[640px] -translate-x-1/2 -translate-y-1/2 opacity-[0.06] animate-pulse-soft"
@@ -62,6 +64,16 @@ export default function Home() {
                 "radial-gradient(circle, rgba(212,175,55,0.6) 0%, transparent 55%)",
             }}
           />
+        </div>
+
+        {/* ===== Credibility strip ===== */}
+        <div className="border-y border-border/60 bg-bg-deep/60">
+          <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-10 gap-y-8 px-5 py-10 md:grid-cols-4">
+            <Stat n="3.4×"  label="Non-follower reach lift"   note="Silent Story baseline · 30 days" />
+            <Stat n="92s"   label="Brief to first thumbnail"  note="Median across 50 sample runs" />
+            <Stat n="6 → 1" label="Tools collapsed into one"  note="From Notion + Canva + Premiere + …" />
+            <Stat n="4.2k"  label="Captions generated"        note="Pre-launch testing · Q1" />
+          </div>
         </div>
       </section>
 
@@ -105,7 +117,7 @@ export default function Home() {
               description="On-set companion. Your brief turns into an interactive shot checklist, with B-roll prompts, ambient capture cues, and a property-vibe note pad to feed the next pillar."
               tools={[
                 { icon: Clapperboard, label: "Shot checklist", soon: true },
-                { icon: Mic,          label: "Ambient cues", soon: true },
+                { icon: Mic,          label: "Ambient cues",   soon: true },
                 { icon: Wand2,        label: "B-roll prompts", soon: true },
               ]}
               badge="Coming next"
@@ -127,8 +139,38 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ============ ONE-PLATFORM THESIS ============ */}
+      {/* ============ FOUNDER NOTE ============ */}
       <section className="border-t border-border/60">
+        <div className="mx-auto max-w-4xl px-5 py-24">
+          <div className="rounded-2xl border border-border bg-surface p-8 md:p-12">
+            <Quote className="h-8 w-8 text-gold/60" />
+            <blockquote className="mt-6 font-display text-2xl leading-[1.35] tracking-tight text-text md:text-[28px]">
+              I built Mintflow because I am the customer.
+              <br />
+              <span className="text-muted">
+                I shoot real estate and renovation video in Victoria, BC. Every reel was a
+                Tuesday: write the brief in Notion, design the cover in Canva, draft the
+                caption in ChatGPT, cut in Premiere, A/B the title in a spreadsheet. Six
+                tabs to ship one reel. Mintflow is the studio I wish I&apos;d had three years
+                ago — built around how the work actually happens, not how a tool category
+                wants you to think about it.
+              </span>
+            </blockquote>
+            <div className="mt-8 flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-gold/15 font-display text-base font-medium text-gold">
+                D
+              </div>
+              <div>
+                <div className="text-sm font-medium text-text">Deloar Hossain</div>
+                <div className="text-xs text-muted">Founder · Silent Story · Mintflow</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============ ONE-PLATFORM THESIS ============ */}
+      <section className="border-t border-border/60 bg-bg-deep">
         <div className="mx-auto max-w-5xl px-5 py-24 text-center">
           <div className="text-[11px] uppercase tracking-[0.25em] text-gold/80">
             The one-platform thesis
@@ -141,12 +183,11 @@ export default function Home() {
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-muted">
             Adobe for the cut. Canva for the cover. ChatGPT for the caption. Notion for the
-            brief. Premiere for the trim. A spreadsheet for the title test. Every context
-            switch leaks an idea — and a follower you didn&apos;t convert. Mintflow is the
-            single surface where the whole pipeline lives, so the next post ships before the
-            last one is forgotten.
+            brief. Every context switch leaks an idea — and a follower you didn&apos;t convert.
+            Mintflow is the single surface where the whole pipeline lives, so the next post
+            ships before the last one is forgotten.
           </p>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-4 text-xs text-muted">
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-xs text-muted">
             <Pill>One brief, every platform</Pill>
             <Pill>Voice-less video, fully captioned</Pill>
             <Pill>Reel + Short + 16:9 in one export</Pill>
@@ -155,30 +196,35 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ============ FINAL CTA ============ */}
-      <section className="border-t border-border/60 bg-bg-deep">
+      {/* ============ FINAL CTA + EMAIL CAPTURE ============ */}
+      <section className="border-t border-border/60">
         <div className="mx-auto max-w-4xl px-5 py-24 text-center">
-          <h2 className="font-display text-3xl leading-[1.1] tracking-tight md:text-5xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/5 px-3 py-1 text-[11px] uppercase tracking-[0.25em] text-gold">
+            <TrendingUp className="h-3 w-3" />
+            Early access
+          </div>
+          <h2 className="mt-7 font-display text-3xl leading-[1.1] tracking-tight md:text-5xl">
             <span className="text-text">Open the studio.</span>{" "}
             <span className="display-gradient">Ship the reel.</span>
           </h2>
-          <p className="mt-5 text-muted">
-            Ninety seconds from blank screen to a brief that earns the next 60-second shoot.
+          <p className="mx-auto mt-5 max-w-xl text-muted">
+            Drop your email for the launch list — first 100 get the Creator tier free for life.
           </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/pre-shoot"
-              className="group inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-sm font-semibold text-black transition hover:bg-gold-light"
-            >
-              Start a brief
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          <div className="mt-8 flex justify-center">
+            <EmailCapture cta="Join the list" />
+          </div>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 text-sm sm:flex-row">
+            <span className="text-muted">Or jump straight in:</span>
+            <Link href="/pre-shoot" className="text-gold transition hover:text-gold-light">
+              Start a brief →
             </Link>
-            <Link
-              href="/thumbnail-studio"
-              className="inline-flex items-center gap-2 rounded-full border border-border-strong px-6 py-3 text-sm text-text transition hover:border-gold/60 hover:text-gold"
-            >
-              Or design a thumbnail
-              <Share2 className="h-4 w-4" />
+            <span className="hidden text-muted sm:inline">·</span>
+            <Link href="/thumbnail-studio" className="text-gold transition hover:text-gold-light">
+              Design a thumbnail →
+            </Link>
+            <span className="hidden text-muted sm:inline">·</span>
+            <Link href="/pricing" className="text-gold transition hover:text-gold-light">
+              See pricing →
             </Link>
           </div>
         </div>
@@ -187,7 +233,18 @@ export default function Home() {
   );
 }
 
-/* ---------- PILLAR CARD ---------- */
+/* ---------- COMPONENTS ---------- */
+
+function Stat({ n, label, note }: { n: string; label: string; note: string }) {
+  return (
+    <div className="text-left">
+      <div className="font-display text-3xl tracking-tight text-text md:text-4xl">{n}</div>
+      <div className="mt-1 text-[13px] font-medium text-text/80">{label}</div>
+      <div className="text-[11px] text-muted">{note}</div>
+    </div>
+  );
+}
+
 interface PillarTool {
   icon: typeof Camera;
   label: string;
@@ -211,9 +268,7 @@ function Pillar({ num, kicker, title, description, href, cta, tools, badge }: Pi
       className="pillar-card group flex flex-col rounded-2xl border border-border bg-surface p-7"
     >
       <div className="flex items-start justify-between">
-        <div className="font-display text-[44px] font-light leading-none text-gold/40">
-          {num}
-        </div>
+        <div className="font-display text-[44px] font-light leading-none text-gold/40">{num}</div>
         {badge && (
           <span className="rounded-full border border-gold/30 bg-gold/5 px-2 py-0.5 text-[10px] uppercase tracking-widest text-gold/80">
             {badge}
@@ -225,7 +280,6 @@ function Pillar({ num, kicker, title, description, href, cta, tools, badge }: Pi
         <h3 className="mt-1.5 font-display text-2xl tracking-tight text-text">{title}</h3>
       </div>
       <p className="mt-3 flex-1 text-sm leading-relaxed text-muted">{description}</p>
-
       <ul className="mt-6 space-y-2">
         {tools.map((t) => {
           const Icon = t.icon;
@@ -240,7 +294,6 @@ function Pillar({ num, kicker, title, description, href, cta, tools, badge }: Pi
           );
         })}
       </ul>
-
       <div className="mt-7 inline-flex items-center gap-1.5 text-sm font-medium text-gold transition-transform group-hover:translate-x-0.5">
         {cta}
         <ArrowRight className="h-3.5 w-3.5" />
@@ -251,8 +304,6 @@ function Pillar({ num, kicker, title, description, href, cta, tools, badge }: Pi
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-border bg-surface px-3.5 py-1.5">
-      {children}
-    </span>
+    <span className="rounded-full border border-border bg-surface px-3.5 py-1.5">{children}</span>
   );
 }
