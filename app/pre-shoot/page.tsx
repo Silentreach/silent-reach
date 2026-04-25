@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import BriefResult from "@/components/BriefResult";
 import { addToHistory } from "@/lib/storage";
 import { getUserContext } from "@/lib/userContext";
+import VoiceNudge from "@/components/VoiceNudge";
 import { newId } from "@/lib/utils";
 import type { PreShootInput, PreShootOutput } from "@/types";
 
@@ -64,6 +65,8 @@ export default function PreShootPage() {
 
   return (
     <div className="space-y-10">
+
+        <VoiceNudge />
       <header>
         <h1 className="text-2xl font-semibold">Pre-Shoot Brief</h1>
         <p className="mt-1 text-sm text-muted">

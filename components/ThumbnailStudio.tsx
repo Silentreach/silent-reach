@@ -391,13 +391,19 @@ export default function ThumbnailStudio() {
 
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Pre-fill brand kit on mount so users stop retyping their brand on every download.
+  // Pre-fill from saved brand kit + URL query params on mount.
+  // Query params come from the brief result's "Design this thumbnail" CTA — that's the cross-pillar handoff.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useMemo(() => {
     if (typeof window === "undefined") return;
     const kit = getBrandKit();
     if (kit.name) setBrand(kit.name);
     if (kit.logoDataUrl) setBrandLogoUrl(kit.logoDataUrl);
+    const qs = new URLSearchParams(window.location.search);
+    const qHeadline = qs.get("headline");
+    const qSubtitle = qs.get("subtitle");
+    if (qHeadline) setHeadline(qHeadline);
+    if (qSubtitle) setSubtitle(qSubtitle);
   }, []);
   const exportRef = useRef<HTMLDivElement>(null);
   const note = useMemo(pickRoadmapNote, []);

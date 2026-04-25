@@ -16,6 +16,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import EmailCapture from "@/components/EmailCapture";
+import DemoBrief from "@/components/DemoBrief";
 
 export default function Home() {
   return (
@@ -77,7 +78,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ============ PILLARS ============ */}
+      <DemoBrief />
+
+            {/* ============ PILLARS ============ */}
       <section className="border-t border-border/60 bg-bg-deep">
         <div className="mx-auto max-w-6xl px-5 py-24">
           <div className="mb-14 max-w-2xl">

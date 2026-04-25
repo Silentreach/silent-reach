@@ -22,7 +22,7 @@ const TOOLS = [
     title: "Shot Checklist",
     blurb:
       "Your Pre-Shoot Brief becomes a tappable, time-stamped checklist on set. Tick each shot as you film. The brief, the call sheet, and the reality of the day — same screen.",
-    eta: "Q2",
+    eta: "Live",
   },
   {
     icon: Wand2,
@@ -115,6 +115,12 @@ export default function ProductionPage() {
                   className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border-strong px-5 py-2.5 text-sm text-text transition hover:border-gold/60 hover:text-gold"
                 >
                   Generate a pack
+                </Link>
+                <Link
+                  href="/production/checklist"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-full border border-gold/60 px-5 py-2.5 text-sm text-gold transition hover:bg-gold/5"
+                >
+                  Open Shot Checklist →
                 </Link>
               </div>
             </div>
