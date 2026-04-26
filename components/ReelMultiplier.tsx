@@ -225,13 +225,13 @@ export default function ReelMultiplier() {
                     </button>
                   )}
                   <input ref={logoInputRef} type="file"
-                    accept="image/png,image/svg+xml,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime"
+                    accept="image/*,video/*"
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0]; if (!f) return;
                       const isVid = f.type.startsWith("video/");
-                      const cap = isVid ? 5 * 1024 * 1024 : 300 * 1024;
-                      if (f.size > cap) { alert(`Logo over ${isVid ? "5MB" : "300KB"} — use a smaller file.`); return; }
+                      const cap = isVid ? 10 * 1024 * 1024 : 500 * 1024;
+                      if (f.size > cap) { alert(`Logo over ${isVid ? "10MB" : "500KB"} — please pick a smaller file. Got ${(f.size / (1024*1024)).toFixed(1)}MB.`); return; }
                       if (isVid) {
                         const url = URL.createObjectURL(f);
                         setCustomLogo({ kind: "video", url });
@@ -300,7 +300,7 @@ const PLATFORM_META: Record<ReelPlatform, { label: string; icon: typeof Instagra
   facebook_reel:  { label: "Facebook Reel",  icon: Facebook,  color: "from-blue-500/30 to-sky-500/30" },
 };
 
-function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogoDataUrl }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null }) {
+function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, musicBPM }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null }) {
   const [active, setActive] = useState<ReelPlatform>(output.packages[0]?.platform || "instagram_reel");
   const pkg = output.packages.find((p) => p.platform === active) || output.packages[0];
 
@@ -351,7 +351,7 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogoDataU
   );
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicBPM }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null }) {
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (label: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(null), 1500); } catch {}
@@ -423,7 +423,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
               {pkg.cutMarkers.length} cut{pkg.cutMarkers.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM (beat-synced cuts)` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
             </div>
             <p className="mt-1 text-xs text-muted">
-              9:16 center-crop · multi-cut stitch · hook text burned in for 3s · audio + video fade out together over 1.5s · {includeOutro && (customLogoDataUrl || getBrandKit().logoDataUrl) ? "animated logo outro at the end" : "no outro"} · WebM output (uploads to YT directly; IG/FB drop in CapCut → re-export as MP4)
+              9:16 center-crop · multi-cut stitch · hook text burned in for 3s · audio + video fade out together over 1.5s · {includeOutro && (customLogo || getBrandKit().logoDataUrl) ? "animated logo outro at the end" : "no outro"} · WebM output (uploads to YT directly; IG/FB drop in CapCut → re-export as MP4)
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
               <label className="flex items-center gap-1.5 text-muted">
