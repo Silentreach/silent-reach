@@ -64,7 +64,7 @@ Location context: ${input.location}
 Target video length: ${input.videoLength}
 Primary platform: ${input.platform}
 Concept: ${input.concept}
-${detailsLine}${userContextPreamble(ctx)}
+${input.series ? `Series / project: ${input.series} (this brief is one reel within a multi-reel project — match visual language and escalating stakes you'd expect from prior reels in the series)\n` : ""}${detailsLine}${userContextPreamble(ctx)}
 
 Return only valid JSON matching this exact schema:
 

@@ -28,6 +28,7 @@ export default function PostUploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [showOverrides, setShowOverrides] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
+  const [lastItemId, setLastItemId] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,14 +55,16 @@ export default function PostUploadPage() {
         transcriptUsed: data.transcriptUsed,
         thumbnailUsed: data.thumbnailUsed,
       });
+      const id = newId();
       addToHistory({
         kind: "pack",
-        id: newId(),
+        id,
         createdAt: new Date().toISOString(),
         input: body,
         meta: data.meta,
         output: data.pack,
       });
+      setLastItemId(id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setError(msg);
@@ -206,7 +209,7 @@ export default function PostUploadPage() {
               Transcript: {result.transcriptUsed ? "used" : "none (OK)"}
             </span>
           </div>
-          <PackResult meta={result.meta} pack={result.pack} />
+          <PackResult meta={result.meta} pack={result.pack} itemId={lastItemId || undefined} />
         </>
       )}
     </div>

@@ -32,6 +32,7 @@ const InputSchema = z.object({
   platform: z.enum(["instagram", "youtube", "youtube_shorts", "linkedin", "all"]),
   concept: z.string().min(5),
   details: z.string().optional(),
+  series: z.string().max(80).optional(),
 });
 
 export const runtime = "nodejs";

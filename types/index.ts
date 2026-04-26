@@ -18,6 +18,9 @@ export interface PreShootInput {
   platform: Platform;
   concept: string;
   details?: string;
+  /** Optional series/project name. Groups multi-reel projects in History
+      and gives Claude continuity context across briefs in the same series. */
+  series?: string;
 }
 
 export interface Hook {

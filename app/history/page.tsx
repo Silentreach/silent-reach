@@ -9,6 +9,7 @@ import {
   getHistory,
   removeFromHistory,
 } from "@/lib/storage";
+import OutcomeCapture from "@/components/OutcomeCapture";
 import type { HistoryItem } from "@/types";
 
 /* Build a searchable text blob for an item: title + first 200 chars of body. */
@@ -176,6 +177,9 @@ export default function HistoryPage() {
                       {new Date(item.createdAt).toLocaleString()}
                     </div>
                   </button>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <OutcomeCapture itemId={item.id} itemKind={item.kind} variant="compact" />
+                  </div>
                   <button
                     onClick={() => remove(item.id)}
                     className="rounded-md p-2 text-muted hover:bg-red-950/30 hover:text-red-300"

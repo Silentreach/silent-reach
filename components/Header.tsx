@@ -17,6 +17,7 @@ const NAV: NavItem[] = [
   { href: "/post-upload",      label: "Pack",        pillar: "post" },
   { href: "/thumbnail-studio", label: "Thumbnails",  pillar: "post" },
   { href: "/library",          label: "Library",   pillar: "post" },
+  { href: "/dashboard",        label: "Dashboard"              },
   { href: "/pricing",          label: "Pricing"                },
   { href: "/settings",         label: "Settings"               },
 ];

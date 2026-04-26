@@ -3,6 +3,7 @@
 import { useState } from "react";
 import CopyButton from "./CopyButton";
 import ThumbnailSuggestions from "./ThumbnailSuggestions";
+import OutcomeCapture from "./OutcomeCapture";
 import type { PostUploadOutput, VideoMeta } from "@/types";
 
 type Tab =
@@ -31,9 +32,11 @@ const TABS: { id: Tab; label: string }[] = [
 export default function PackResult({
   meta,
   pack,
+  itemId,
 }: {
   meta: VideoMeta;
   pack: PostUploadOutput;
+  itemId?: string;
 }) {
   const [tab, setTab] = useState<Tab>("instagram");
 
@@ -43,6 +46,9 @@ export default function PackResult({
 
   return (
     <div className="space-y-6">
+      {itemId && (
+        <OutcomeCapture itemId={itemId} itemKind="pack" />
+      )}
       <div className="flex gap-4 rounded-lg border border-border bg-surface p-4">
         {meta.thumbnailUrl && (
           // eslint-disable-next-line @next/next/no-img-element

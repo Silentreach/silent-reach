@@ -5,9 +5,10 @@ import Link from "next/link";
 import { ArrowRight, Bookmark, BookmarkCheck, Image as ImageIcon, Send, ListChecks } from "lucide-react";
 import CopyButton from "./CopyButton";
 import { isSaved, toggleSaved } from "@/lib/library";
+import OutcomeCapture from "./OutcomeCapture";
 import type { PreShootOutput } from "@/types";
 
-export default function BriefResult({ output }: { output: PreShootOutput }) {
+export default function BriefResult({ output, itemId }: { output: PreShootOutput; itemId?: string }) {
   const allText = [
     "HOOKS",
     ...output.hooks.map(
@@ -138,6 +139,10 @@ export default function BriefResult({ output }: { output: PreShootOutput }) {
           ))}
         </ul>
       </Section>
+
+      {itemId && (
+        <OutcomeCapture itemId={itemId} itemKind="brief" />
+      )}
 
       {/* Cross-pillar continuity bar */}
       <div className="rounded-2xl border border-gold/30 bg-gold/5 p-5 md:p-6">

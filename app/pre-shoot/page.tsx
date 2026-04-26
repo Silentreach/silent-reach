@@ -17,6 +17,7 @@ const defaults: PreShootInput = {
   platform: "instagram",
   concept: "",
   details: "",
+  series: "",
 };
 
 export default function PreShootPage() {
@@ -24,6 +25,7 @@ export default function PreShootPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<PreShootOutput | null>(null);
+  const [lastItemId, setLastItemId] = useState<string | null>(null);
 
   function update<K extends keyof PreShootInput>(
     key: K,
@@ -48,13 +50,15 @@ export default function PreShootPage() {
         throw new Error(data.error || `Request failed (${res.status})`);
       }
       setOutput(data.output);
+      const id = newId();
       addToHistory({
         kind: "brief",
-        id: newId(),
+        id,
         createdAt: new Date().toISOString(),
         input,
         output: data.output,
       });
+      setLastItemId(id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setError(msg);
@@ -156,6 +160,15 @@ export default function PreShootPage() {
           />
         </Field>
 
+        <Field label="Series / project name (optional)">
+          <input
+            type="text"
+            value={input.series || ""}
+            onChange={(e) => update("series", e.target.value)}
+            placeholder="e.g. Oak Bay reno series · Q2 listings · Kitchen reels Vol. 2"
+          />
+        </Field>
+
         <Field label="Additional project details (optional)">
           <textarea
             rows={3}
@@ -189,7 +202,7 @@ export default function PreShootPage() {
         </div>
       </form>
 
-      {output && <BriefResult output={output} />}
+      {output && <BriefResult output={output} itemId={lastItemId || undefined} />}
     </div>
   );
 }

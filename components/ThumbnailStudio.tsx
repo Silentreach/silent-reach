@@ -182,7 +182,16 @@ export default function ThumbnailStudio() {
     const qPreset   = qs.get("preset") as PresetId | null;
     if (qHeadline) setHeadline(qHeadline);
     if (qSubtitle) setSubtitle(qSubtitle);
-    if (qImage)    setImage(qImage);
+    if (qImage) {
+      // Route remote URLs through our same-origin proxy so html-to-image can capture them
+      // without canvas tainting. Data URLs and same-origin URLs pass through as-is.
+      const isDataUrl = qImage.startsWith("data:");
+      const isSameOrigin = qImage.startsWith("/") || qImage.startsWith(window.location.origin);
+      const finalSrc = (isDataUrl || isSameOrigin)
+        ? qImage
+        : `/api/proxy-image?url=${encodeURIComponent(qImage)}`;
+      setImage(finalSrc);
+    }
     if (qPreset && ["editorial","impact","minimal"].includes(qPreset)) setPreset(qPreset);
   }, []);
   const exportRef = useRef<HTMLDivElement>(null);
