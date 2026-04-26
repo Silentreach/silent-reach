@@ -1,9 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { getBrandKit } from "@/lib/userContext";
+import { renderTrimmedReel, downloadBlob } from "@/lib/videoRender";
 import {
   Upload, Sparkles, Loader2, Film, X, Music, Clock, MessageSquare,
-  Hash, Image as ImageIcon, ArrowRight, Instagram, Youtube, Facebook, ExternalLink, Check,
+  Hash, Image as ImageIcon, ArrowRight, Instagram, Youtube, Facebook, ExternalLink, Check, Download,
 } from "lucide-react";
 import { getUserContext } from "@/lib/userContext";
 import type {
@@ -191,7 +193,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} />}
     </div>
   );
 }
@@ -213,7 +215,7 @@ const PLATFORM_META: Record<ReelPlatform, { label: string; icon: typeof Instagra
   facebook_reel:  { label: "Facebook Reel",  icon: Facebook,  color: "from-blue-500/30 to-sky-500/30" },
 };
 
-function ReelResults({ output, sourceUrl }: { output: ReelMultiplierOutput; sourceUrl: string | null }) {
+function ReelResults({ output, sourceUrl, sourceFile }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null }) {
   const [active, setActive] = useState<ReelPlatform>(output.packages[0]?.platform || "instagram_reel");
   const pkg = output.packages.find((p) => p.platform === active) || output.packages[0];
 
@@ -242,7 +244,7 @@ function ReelResults({ output, sourceUrl }: { output: ReelMultiplierOutput; sour
         })}
       </div>
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} />}
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} />}
 
       {/* Music licensing footer */}
       <div className="rounded-2xl border border-border bg-bg-deep p-5">
@@ -264,7 +266,7 @@ function ReelResults({ output, sourceUrl }: { output: ReelMultiplierOutput; sour
   );
 }
 
-function PackageCard({ pkg, sourceUrl }: { pkg: ReelPackage; sourceUrl: string | null }) {
+function PackageCard({ pkg, sourceUrl, sourceFile }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null }) {
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (label: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(null), 1500); } catch {}
@@ -273,8 +275,71 @@ function PackageCard({ pkg, sourceUrl }: { pkg: ReelPackage; sourceUrl: string |
   const cut = pkg.cutMarkers[0];
   const cutLen = cut ? Math.max(0, cut.endSec - cut.startSec) : 0;
 
+  // Render & Download state
+  const [renderState, setRenderState] = useState<"idle" | "rendering" | "done" | "error">("idle");
+  const [renderPct, setRenderPct] = useState(0);
+  const [renderError, setRenderError] = useState<string | null>(null);
+
+  const onRender = async () => {
+    if (!sourceFile || !cut) return;
+    setRenderState("rendering"); setRenderPct(0); setRenderError(null);
+    try {
+      const kit = getBrandKit();
+      const { blob, mimeType } = await renderTrimmedReel({
+        source: sourceFile,
+        startSec: cut.startSec,
+        endSec: cut.endSec,
+        logoDataUrl: kit.logoDataUrl,
+        onProgress: (p) => setRenderPct(p),
+      });
+      const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+      const platformShort = pkg.platform === "instagram_reel" ? "ig" : pkg.platform === "youtube_short" ? "yt" : "fb";
+      const tag = (pkg.title || pkg.hookLine || "reel").slice(0, 32).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      downloadBlob(blob, `mintflow_${platformShort}_${tag}.${ext}`);
+      setRenderState("done");
+      setTimeout(() => setRenderState("idle"), 2500);
+    } catch (err: unknown) {
+      setRenderError(err instanceof Error ? err.message : "Couldn’t render the reel.");
+      setRenderState("error");
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Render & Download bar — the centerpiece for Pro users */}
+      <div className="rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/10 to-transparent p-5">
+        <div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render &amp; download this reel</div>
+            <div className="mt-1 font-display text-lg tracking-tight text-text">
+              Trim to {fmtSec(cut?.startSec || 0)}–{fmtSec(cut?.endSec || cutLen)} ({cutLen.toFixed(0)}s) · brand logo {getBrandKit().logoDataUrl ? "applied" : "(set in Brand Kit)"}
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              Renders in your browser — no upload, no server. Output is WebM (works on YouTube directly; for IG/FB drop into CapCut and re-export as MP4 — 10 seconds).
+              Music: add in CapCut after download. (Direct music mux ships next push.)
+            </p>
+          </div>
+          <button
+            onClick={onRender}
+            disabled={renderState === "rendering" || !sourceFile}
+            className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60"
+          >
+            {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> Rendering {(renderPct * 100).toFixed(0)}%</>}
+            {renderState === "done" && <><Check className="h-4 w-4" /> Downloaded</>}
+            {renderState === "error" && <><Download className="h-4 w-4" /> Try again</>}
+            {renderState === "idle" && <><Download className="h-4 w-4" /> Render &amp; download</>}
+          </button>
+        </div>
+        {renderState === "rendering" && (
+          <div className="mt-3 h-1 overflow-hidden rounded-full bg-border">
+            <div className="h-full bg-gold transition-[width] duration-300" style={{ width: `${(renderPct * 100).toFixed(0)}%` }} />
+          </div>
+        )}
+        {renderError && (
+          <div className="mt-3 text-xs text-amber-300">{renderError}</div>
+        )}
+      </div>
+
       {/* Cut + hook + caption row */}
       <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         {/* Left: cut + hook */}

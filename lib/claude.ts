@@ -159,7 +159,12 @@ export async function generatePreShoot(
 ): Promise<PreShootOutput> {
   const t0 = Date.now();
   const { system, user } = buildPreShootPrompt(input, ctx);
-  const raw = await callClaude(system, user);
+  // Brief generation now uses Haiku 4.5 (same as Reel Multiplier) — the new richer
+  // schema (5 hooks + bRoll + filmingNotes + openerVariants + successChecks) was
+  // pushing Sonnet past the 55s SDK budget. Haiku is ~2x faster, sufficient quality
+  // for structured-schema generation. Switch back to MODEL (Sonnet) if quality drops.
+  void t0;
+  const raw = await callClaude(system, user, undefined, MODEL_FAST);
   const json = extractJson(raw);
 
   // Try strict parse first
