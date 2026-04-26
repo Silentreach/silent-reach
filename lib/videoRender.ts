@@ -13,6 +13,14 @@
 export interface Segment { startSec: number; endSec: number; }
 export type OutputAspect = "9:16" | "1:1" | "16:9";
 export type HookPosition = "top" | "bottom" | "auto";
+export type HookBackground = "none" | "pill" | "box";
+export type LogoKind = "image" | "video";
+
+export interface LogoSource {
+  kind: LogoKind;
+  /** Data URL for images, object URL for videos */
+  url: string;
+}
 
 export interface RenderOptions {
   source: File;
@@ -20,11 +28,13 @@ export interface RenderOptions {
   outputAspect: OutputAspect;
   hookLine?: string;
   hookPosition?: HookPosition;        // default "auto"
+  hookBackground?: HookBackground;    // default "none"
+  hookBackgroundColor?: string;       // hex, used when background != "none"
   platform?: "instagram_reel" | "youtube_short" | "facebook_reel";
-  logoDataUrl?: string;
+  logo?: LogoSource;                   // image or video logo
   musicFile?: File;
   brandName?: string;
-  includeOutro?: boolean;             // default true if logo present
+  includeOutro?: boolean;
   outroDurationSec?: number;          // default 2.0
   fadeOutSec?: number;                // default 1.5
   onProgress?: (pct: number) => void;
@@ -50,7 +60,7 @@ function resolveHookPosition(p?: HookPosition, platform?: RenderOptions["platfor
 
 export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   const {
-    source, segments, outputAspect, hookLine, logoDataUrl, musicFile, brandName,
+    source, segments, outputAspect, hookLine, musicFile, brandName,
     onProgress,
   } = opts;
   if (segments.length === 0) throw new Error("No cut segments provided.");
@@ -58,7 +68,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   const hookPos = resolveHookPosition(opts.hookPosition, opts.platform);
   const fadeOutSec = opts.fadeOutSec ?? 1.5;
   const outroDurSec = opts.outroDurationSec ?? 2.0;
-  const includeOutro = (opts.includeOutro ?? true) && !!logoDataUrl;
+  const includeOutro = (opts.includeOutro ?? true) && !!opts.logo;
 
   const totalMainDur = segments.reduce((acc, s) => acc + Math.max(0, s.endSec - s.startSec), 0);
   const totalRenderDur = totalMainDur + (includeOutro ? outroDurSec : 0);
@@ -85,9 +95,21 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   if (!ctx) throw new Error("Browser canvas unavailable.");
   ctx.fillStyle = "#000"; ctx.fillRect(0, 0, dims.w, dims.h);
 
-  /* Logo */
+  /* Logo — image OR video (MP4/WebM) */
   let logoImg: HTMLImageElement | null = null;
-  if (logoDataUrl) logoImg = await loadImage(logoDataUrl).catch(() => null);
+  let logoVideo: HTMLVideoElement | null = null;
+  if (opts.logo?.url) {
+    if (opts.logo.kind === "video") {
+      logoVideo = await loadLogoVideo(opts.logo.url).catch(() => null);
+      if (logoVideo) {
+        logoVideo.loop = true;
+        logoVideo.muted = true;
+        try { await logoVideo.play(); } catch {}
+      }
+    } else {
+      logoImg = await loadImage(opts.logo.url).catch(() => null);
+    }
+  }
 
   /* Audio path — both music and source go through Web Audio so we can fade either */
   type AudioCtxCtor = typeof AudioContext;
@@ -147,9 +169,10 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     if (phase === "main") {
       drawFrame(ctx, video, dims);
       if (hookLine && elapsedTotalSec < 3.0) {
-        drawHookOverlay(ctx, hookLine, dims, hookPos);
+        drawAnimatedHook(ctx, hookLine, dims, hookPos, elapsedTotalSec, opts.hookBackground || "none", opts.hookBackgroundColor);
       }
-      if (logoImg) drawLogo(ctx, logoImg, dims);
+      if (logoVideo) drawLogoVideo(ctx, logoVideo, dims);
+      else if (logoImg) drawLogo(ctx, logoImg, dims);
       else if (brandName) drawBrandText(ctx, brandName, dims);
 
       // Visual fadeout in the last fadeOutSec seconds of MAIN (before outro)
@@ -159,8 +182,10 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
         ctx.fillStyle = `rgba(0,0,0,${a.toFixed(3)})`;
         ctx.fillRect(0, 0, dims.w, dims.h);
       }
-    } else if (phase === "outro" && logoImg) {
-      drawOutroFrame(ctx, dims, logoImg, brandName, (nowMs - outroStartWall) / 1000, outroDurSec);
+    } else if (phase === "outro") {
+      const elapsedOutro = (nowMs - outroStartWall) / 1000;
+      if (logoVideo) drawOutroVideo(ctx, dims, logoVideo, brandName, elapsedOutro, outroDurSec);
+      else if (logoImg) drawOutroFrame(ctx, dims, logoImg, brandName, elapsedOutro, outroDurSec);
     }
 
     if (onProgress) onProgress(Math.min(1, elapsedTotalSec / totalRenderDur));
@@ -196,7 +221,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   }
 
   /* Outro phase */
-  if (includeOutro && logoImg) {
+  if (includeOutro && (logoImg || logoVideo)) {
     outroStartWall = performance.now();
     phase = "outro";
     await new Promise((r) => setTimeout(r, outroDurSec * 1000));
@@ -230,18 +255,46 @@ function drawFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, dims:
   ctx.drawImage(video, sx, sy, scw, sch, 0, 0, dims.w, dims.h);
 }
 
-function drawHookOverlay(ctx: CanvasRenderingContext2D, text: string, dims: { w: number; h: number }, position: "top" | "bottom") {
+/* Motion hook overlay — slides up + fades in over 0.45s, holds, then fades out over 0.4s.
+   Optional rounded-pill or box background behind the text using the brand color. */
+function drawAnimatedHook(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  dims: { w: number; h: number },
+  position: "top" | "bottom",
+  elapsedSec: number,
+  bgStyle: HookBackground,
+  bgColor?: string,
+) {
+  const HOLD_END = 2.6;
+  const TOTAL = 3.0;
+  // Easing — easeOutCubic
+  const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+  let opacity = 1;
+  let yOffset = 0;
+  if (elapsedSec < 0.45) {
+    const k = ease(elapsedSec / 0.45);
+    opacity = k;
+    yOffset = (1 - k) * (position === "top" ? -28 : 28);
+  } else if (elapsedSec > HOLD_END) {
+    const k = (elapsedSec - HOLD_END) / (TOTAL - HOLD_END);
+    opacity = Math.max(0, 1 - k);
+    yOffset = k * (position === "top" ? -10 : 10);
+  }
+  if (opacity <= 0.01) return;
+
   const padding = Math.round(dims.w * 0.06);
   const fontSize = Math.round(dims.w * 0.062);
+  const lineH = fontSize * 1.18;
+
   ctx.save();
   ctx.font = `700 ${fontSize}px "Inter Tight", Inter, Helvetica, Arial, sans-serif`;
-  ctx.fillStyle = "#fff";
-  ctx.shadowColor = "rgba(0,0,0,0.85)";
-  ctx.shadowBlur = 18;
-  ctx.shadowOffsetY = 4;
+  ctx.textBaseline = "top";
+
+  // Word-wrap
   const maxW = dims.w - padding * 2;
-  const lines: string[] = [];
   const words = text.split(/\s+/);
+  const lines: string[] = [];
   let line = "";
   for (const w of words) {
     const test = line ? `${line} ${w}` : w;
@@ -249,20 +302,54 @@ function drawHookOverlay(ctx: CanvasRenderingContext2D, text: string, dims: { w:
     else line = test;
   }
   if (line) lines.push(line);
-  const lineH = fontSize * 1.15;
-  if (position === "top") {
-    ctx.textBaseline = "top";
-    const top = Math.round(dims.h * 0.16);
-    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], padding, top + i * lineH, maxW);
+
+  const blockH = lines.length * lineH;
+  const top = position === "top"
+    ? Math.round(dims.h * 0.16) + yOffset
+    : Math.round(dims.h * 0.78) - blockH + yOffset;
+
+  // Background pill / box
+  if (bgStyle !== "none") {
+    const pad = Math.round(fontSize * 0.45);
+    let widest = 0;
+    for (const l of lines) widest = Math.max(widest, ctx.measureText(l).width);
+    const bgX = padding - pad;
+    const bgY = top - pad * 0.5;
+    const bgW = widest + pad * 2;
+    const bgH = blockH + pad;
+    const radius = bgStyle === "pill" ? Math.min(bgH / 2, fontSize) : Math.round(fontSize * 0.18);
+    ctx.globalAlpha = opacity * 0.92;
+    ctx.fillStyle = bgColor || "#0a0a0a";
+    roundRect(ctx, bgX, bgY, bgW, bgH, radius);
+    ctx.fill();
+    ctx.globalAlpha = opacity;
   } else {
-    ctx.textBaseline = "bottom";
-    const blockH = lines.length * lineH;
-    const bottom = Math.round(dims.h * 0.78);
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], padding, bottom - blockH + (i + 1) * lineH, maxW);
-    }
+    // Drop shadow only
+    ctx.shadowColor = "rgba(0,0,0,0.85)";
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 4;
+    ctx.globalAlpha = opacity;
+  }
+
+  ctx.fillStyle = "#fff";
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], padding, top + i * lineH, maxW);
   }
   ctx.restore();
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 function drawLogo(ctx: CanvasRenderingContext2D, img: HTMLImageElement, dims: { w: number; h: number }) {
@@ -363,6 +450,63 @@ function playUntil(video: HTMLVideoElement, endSec: number): Promise<void> {
       raf = requestAnimationFrame(tick);
     };
     video.play().then(() => { raf = requestAnimationFrame(tick); }).catch(rej);
+  });
+}
+
+function drawLogoVideo(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, dims: { w: number; h: number }) {
+  const naturalW = video.videoWidth || 1; const naturalH = video.videoHeight || 1;
+  const lw = Math.round(dims.w * 0.18);
+  const lh = Math.round(lw * (naturalH / naturalW));
+  const pad = Math.round(dims.w * 0.03);
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.drawImage(video, dims.w - lw - pad, dims.h - lh - pad, lw, lh);
+  ctx.restore();
+}
+
+function drawOutroVideo(
+  ctx: CanvasRenderingContext2D,
+  dims: { w: number; h: number },
+  video: HTMLVideoElement,
+  brandName: string | undefined,
+  elapsedSec: number,
+  totalSec: number,
+) {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, dims.w, dims.h);
+  const t = Math.min(1, Math.max(0, elapsedSec / totalSec));
+  let alpha = 1;
+  if (t < 0.18) alpha = t / 0.18;
+  else if (t > 0.82) alpha = Math.max(0, 1 - (t - 0.82) / 0.18);
+  const naturalW = video.videoWidth || 1; const naturalH = video.videoHeight || 1;
+  const targetW = Math.round(dims.w * 0.6);
+  const targetH = Math.round(targetW * (naturalH / naturalW));
+  const x = Math.round((dims.w - targetW) / 2);
+  const y = Math.round((dims.h - targetH) / 2 - dims.w * 0.04);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(video, x, y, targetW, targetH);
+  if (brandName) {
+    const fs = Math.round(dims.w * 0.028);
+    ctx.font = `500 ${fs}px Inter, Helvetica, Arial, sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(brandName.toUpperCase(), dims.w / 2, y + targetH + dims.w * 0.025);
+  }
+  ctx.restore();
+}
+
+function loadLogoVideo(src: string): Promise<HTMLVideoElement> {
+  return new Promise((res, rej) => {
+    const v = document.createElement("video");
+    v.src = src;
+    v.muted = true;
+    v.loop = true;
+    v.playsInline = true;
+    v.crossOrigin = "anonymous";
+    v.onloadedmetadata = () => res(v);
+    v.onerror = () => rej(new Error("Couldn’t load logo video."));
   });
 }
 

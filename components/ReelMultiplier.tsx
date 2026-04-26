@@ -62,7 +62,7 @@ export default function ReelMultiplier() {
   const [series, setSeries] = useState<string>("");
   const [stage, setStage] = useState<"idle" | "extracting" | "thinking" | "done" | "error">("idle");
   const [musicFile, setMusicFile] = useState<File | null>(null);
-  const [customLogoDataUrl, setCustomLogoDataUrl] = useState<string | null>(null);
+  const [customLogo, setCustomLogo] = useState<{kind: "image" | "video"; url: string} | null>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -184,24 +184,39 @@ export default function ReelMultiplier() {
                 </div>
               </Field>
 
-              <Field label="Brand logo (optional — corner watermark on rendered reel)">
+              <Field label="Brand logo (PNG / SVG / MP4 motion logo)">
                 <div className="flex items-center gap-2 rounded-md border border-border bg-bg p-2">
-                  {customLogoDataUrl ? (
+                  {customLogo ? (
                     <>
-                      <img src={customLogoDataUrl} alt="" className="h-7 w-7 rounded object-contain" />
-                      <span className="flex-1 truncate text-xs text-text/85">Custom logo loaded</span>
-                      <button type="button" onClick={() => setCustomLogoDataUrl(null)} className="text-xs text-muted hover:text-text"><X className="h-3 w-3" /></button>
+                      {customLogo.kind === "video" ? (
+                        <video src={customLogo.url} className="h-7 w-7 rounded object-contain" muted playsInline autoPlay loop />
+                      ) : (
+                        <img src={customLogo.url} alt="" className="h-7 w-7 rounded object-contain" />
+                      )}
+                      <span className="flex-1 truncate text-xs text-text/85">{customLogo.kind === "video" ? "Motion logo" : "Static logo"} loaded</span>
+                      <button type="button" onClick={() => setCustomLogo(null)} className="text-xs text-muted hover:text-text"><X className="h-3 w-3" /></button>
                     </>
                   ) : (
                     <button type="button" onClick={() => logoInputRef.current?.click()} className="flex w-full items-center gap-2 text-xs text-muted hover:text-text">
-                      <Upload className="h-3 w-3" /> Upload PNG / SVG (or use Brand Kit)
+                      <Upload className="h-3 w-3" /> PNG / SVG / MP4 motion logo (or use Brand Kit)
                     </button>
                   )}
-                  <input ref={logoInputRef} type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp" className="hidden"
+                  <input ref={logoInputRef} type="file"
+                    accept="image/png,image/svg+xml,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime"
+                    className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0]; if (!f) return;
-                      if (f.size > 300 * 1024) { alert("Logo over 300KB — use a smaller file."); return; }
-                      const r = new FileReader(); r.onload = (ev) => setCustomLogoDataUrl(String(ev.target?.result || "")); r.readAsDataURL(f);
+                      const isVid = f.type.startsWith("video/");
+                      const cap = isVid ? 5 * 1024 * 1024 : 300 * 1024;
+                      if (f.size > cap) { alert(`Logo over ${isVid ? "5MB" : "300KB"} — use a smaller file.`); return; }
+                      if (isVid) {
+                        const url = URL.createObjectURL(f);
+                        setCustomLogo({ kind: "video", url });
+                      } else {
+                        const r = new FileReader();
+                        r.onload = (ev) => setCustomLogo({ kind: "image", url: String(ev.target?.result || "") });
+                        r.readAsDataURL(f);
+                      }
                     }} />
                 </div>
               </Field>
@@ -240,7 +255,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogoDataUrl={customLogoDataUrl} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} />}
     </div>
   );
 }
@@ -262,7 +277,7 @@ const PLATFORM_META: Record<ReelPlatform, { label: string; icon: typeof Instagra
   facebook_reel:  { label: "Facebook Reel",  icon: Facebook,  color: "from-blue-500/30 to-sky-500/30" },
 };
 
-function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogoDataUrl }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogoDataUrl: string | null }) {
+function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogoDataUrl }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null }) {
   const [active, setActive] = useState<ReelPlatform>(output.packages[0]?.platform || "instagram_reel");
   const pkg = output.packages.find((p) => p.platform === active) || output.packages[0];
 
@@ -291,7 +306,7 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogoDataU
         })}
       </div>
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogoDataUrl={customLogoDataUrl} />}
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogo={customLogo} />}
 
       {/* Music licensing footer */}
       <div className="rounded-2xl border border-border bg-bg-deep p-5">
@@ -313,7 +328,7 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogoDataU
   );
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogoDataUrl: string | null }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null }) {
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (label: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(null), 1500); } catch {}
@@ -328,26 +343,33 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
   const [renderError, setRenderError] = useState<string | null>(null);
   const [hookPos, setHookPos] = useState<"auto" | "top" | "bottom">("auto");
   const [includeOutro, setIncludeOutro] = useState(true);
+  const [hookBg, setHookBg] = useState<"none" | "pill" | "box">("none");
 
   const onRender = async () => {
     if (!sourceFile || pkg.cutMarkers.length === 0) return;
     setRenderState("rendering"); setRenderPct(0); setRenderError(null);
     try {
       const kit = getBrandKit();
-      // Aspect: 9:16 for IG/YT/FB reels (all three are vertical)
-      const outputAspect = pkg.platform === "youtube_short" ? "9:16" : "9:16";
-      const logo = customLogoDataUrl || kit.logoDataUrl || undefined;
+      const outputAspect = "9:16" as const;
+      // Pick the logo source: inline upload wins, else Brand Kit (always image), else none
+      const logo = customLogo
+        ? customLogo
+        : kit.logoDataUrl
+          ? { kind: "image" as const, url: kit.logoDataUrl }
+          : undefined;
       const { blob, mimeType } = await renderReel({
         source: sourceFile,
         segments: pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec })),
         outputAspect,
         hookLine: pkg.hookLine,
-        hookPosition: hookPos, // user override or "auto" (platform-tuned)
+        hookPosition: hookPos,
+        hookBackground: hookBg,
+        hookBackgroundColor: kit.primaryColor,
         platform: pkg.platform,
-        logoDataUrl: logo,
+        logo,
         musicFile: musicFile || undefined,
         brandName: kit.name,
-        includeOutro: includeOutro && !!logo, // outro requires a logo
+        includeOutro: includeOutro && !!logo,
         outroDurationSec: 2.0,
         fadeOutSec: 1.5,
         onProgress: (p) => setRenderPct(p),
@@ -372,7 +394,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
           <div className="flex-1">
             <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render &amp; download this reel</div>
             <div className="mt-1 font-display text-lg tracking-tight text-text">
-              {pkg.cutMarkers.length} cut{pkg.cutMarkers.length === 1 ? "" : "s"}, stitched to 9:16 · {(customLogoDataUrl || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? `music: ${musicFile.name.slice(0, 28)}` : "source audio"}
+              {pkg.cutMarkers.length} cut{pkg.cutMarkers.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? `music: ${musicFile.name.slice(0, 28)}` : "source audio"}
             </div>
             <p className="mt-1 text-xs text-muted">
               9:16 center-crop · multi-cut stitch · hook text burned in for 3s · audio + video fade out together over 1.5s · {includeOutro && (customLogoDataUrl || getBrandKit().logoDataUrl) ? "animated logo outro at the end" : "no outro"} · WebM output (uploads to YT directly; IG/FB drop in CapCut → re-export as MP4)
@@ -381,14 +403,22 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
               <label className="flex items-center gap-1.5 text-muted">
                 Hook position:
                 <select value={hookPos} onChange={(e) => setHookPos(e.target.value as "auto" | "top" | "bottom")} className="!w-auto !rounded !border !border-border !bg-bg !px-2 !py-1 !text-xs">
-                  <option value="auto">Auto (platform-tuned)</option>
-                  <option value="top">Top third</option>
-                  <option value="bottom">Bottom third</option>
+                  <option value="auto">Auto</option>
+                  <option value="top">Top</option>
+                  <option value="bottom">Bottom</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5 text-muted">
+                Hook background:
+                <select value={hookBg} onChange={(e) => setHookBg(e.target.value as "none" | "pill" | "box")} className="!w-auto !rounded !border !border-border !bg-bg !px-2 !py-1 !text-xs">
+                  <option value="none">Transparent</option>
+                  <option value="pill">Pill (brand color)</option>
+                  <option value="box">Box (brand color)</option>
                 </select>
               </label>
               <label className="flex items-center gap-1.5 text-muted">
                 <input type="checkbox" checked={includeOutro} onChange={(e) => setIncludeOutro(e.target.checked)} className="!h-3 !w-3 !rounded !border !border-border-strong" />
-                Animated logo outro (2s)
+                Logo outro
               </label>
             </div>
           </div>
