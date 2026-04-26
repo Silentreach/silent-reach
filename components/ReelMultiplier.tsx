@@ -326,6 +326,8 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
   const [renderState, setRenderState] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [renderPct, setRenderPct] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [hookPos, setHookPos] = useState<"auto" | "top" | "bottom">("auto");
+  const [includeOutro, setIncludeOutro] = useState(true);
 
   const onRender = async () => {
     if (!sourceFile || pkg.cutMarkers.length === 0) return;
@@ -340,9 +342,14 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
         segments: pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec })),
         outputAspect,
         hookLine: pkg.hookLine,
+        hookPosition: hookPos, // user override or "auto" (platform-tuned)
+        platform: pkg.platform,
         logoDataUrl: logo,
         musicFile: musicFile || undefined,
-        brandName: !logo ? kit.name : undefined,
+        brandName: kit.name,
+        includeOutro: includeOutro && !!logo, // outro requires a logo
+        outroDurationSec: 2.0,
+        fadeOutSec: 1.5,
         onProgress: (p) => setRenderPct(p),
       });
       const ext = mimeType.includes("mp4") ? "mp4" : "webm";
@@ -368,9 +375,22 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
               {pkg.cutMarkers.length} cut{pkg.cutMarkers.length === 1 ? "" : "s"}, stitched to 9:16 · {(customLogoDataUrl || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? `music: ${musicFile.name.slice(0, 28)}` : "source audio"}
             </div>
             <p className="mt-1 text-xs text-muted">
-              Renders in your browser — no server. Center-cropped to vertical 9:16, hook text burned into the first 3 seconds, all AI cut-markers stitched in order.
-              Output: WebM (uploads natively to YouTube; for IG/FB drop into CapCut and re-export as MP4 in 10 seconds).
+              9:16 center-crop · multi-cut stitch · hook text burned in for 3s · audio + video fade out together over 1.5s · {includeOutro && (customLogoDataUrl || getBrandKit().logoDataUrl) ? "animated logo outro at the end" : "no outro"} · WebM output (uploads to YT directly; IG/FB drop in CapCut → re-export as MP4)
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+              <label className="flex items-center gap-1.5 text-muted">
+                Hook position:
+                <select value={hookPos} onChange={(e) => setHookPos(e.target.value as "auto" | "top" | "bottom")} className="!w-auto !rounded !border !border-border !bg-bg !px-2 !py-1 !text-xs">
+                  <option value="auto">Auto (platform-tuned)</option>
+                  <option value="top">Top third</option>
+                  <option value="bottom">Bottom third</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5 text-muted">
+                <input type="checkbox" checked={includeOutro} onChange={(e) => setIncludeOutro(e.target.checked)} className="!h-3 !w-3 !rounded !border !border-border-strong" />
+                Animated logo outro (2s)
+              </label>
+            </div>
           </div>
           <button
             onClick={onRender}
