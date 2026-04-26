@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Bookmark, BookmarkCheck, Image as ImageIcon, Send, ListChecks } from "lucide-react";
+import { ArrowRight, Bookmark, BookmarkCheck, Image as ImageIcon, Send, ListChecks, Camera, Sun, Mic, AlertTriangle, Wand2, CheckCircle2, Shuffle } from "lucide-react";
 import CopyButton from "./CopyButton";
 import { isSaved, toggleSaved } from "@/lib/library";
 import OutcomeCapture from "./OutcomeCapture";
@@ -61,6 +61,81 @@ export default function BriefResult({ output, itemId }: { output: PreShootOutput
           ))}
         </div>
       </Section>
+
+      {/* World-class enrichments — only render if present (backward-compatible with old briefs) */}
+      {output.openerVariants && output.openerVariants.length > 0 && (
+        <Section title="Opener variants — film both, A/B in editing">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {output.openerVariants.map((v, i) => (
+              <div key={i} className="rounded-lg border border-border bg-surface p-4">
+                <div className="flex items-center gap-2">
+                  <Shuffle className="h-3 w-3 text-gold" />
+                  <span className="text-[10px] uppercase tracking-widest text-muted">{v.feel}</span>
+                </div>
+                <div className="mt-1.5 font-medium leading-snug">&ldquo;{v.line}&rdquo;</div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {output.bRollList && output.bRollList.length > 0 && (
+        <Section title="B-roll — also grab while on site">
+          <ul className="space-y-2">
+            {output.bRollList.map((b, i) => (
+              <li key={i} className="flex items-start gap-2.5 rounded-lg border border-border bg-surface p-3 text-sm">
+                <Camera className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold/70" />
+                <div className="flex-1">
+                  <div>{b.shot}</div>
+                  {b.whyItHelps && <div className="mt-0.5 text-xs text-muted">↳ {b.whyItHelps}</div>}
+                </div>
+                <SaveButton kind="hook" text={b.shot} source="B-roll list" />
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      {output.filmingNotes && (output.filmingNotes.gear || output.filmingNotes.lighting || output.filmingNotes.timeOfDay || output.filmingNotes.soundCapture || output.filmingNotes.riskCalls) && (
+        <Section title="Filming notes">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {output.filmingNotes.gear && (
+              <NoteCard icon={Wand2} label="Gear" body={output.filmingNotes.gear} />
+            )}
+            {output.filmingNotes.lighting && (
+              <NoteCard icon={Sun} label="Lighting" body={output.filmingNotes.lighting} />
+            )}
+            {output.filmingNotes.timeOfDay && (
+              <NoteCard icon={Sun} label="Time of day" body={output.filmingNotes.timeOfDay} />
+            )}
+            {output.filmingNotes.soundCapture && (
+              <NoteCard icon={Mic} label="Sound capture" body={output.filmingNotes.soundCapture} />
+            )}
+            {output.filmingNotes.riskCalls && (
+              <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 p-3 sm:col-span-2">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-amber-400/80">
+                  <AlertTriangle className="h-3 w-3" /> Risk calls
+                </div>
+                <div className="mt-1 text-sm text-amber-100/90">{output.filmingNotes.riskCalls}</div>
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
+
+      {output.successChecks && output.successChecks.length > 0 && (
+        <Section title="Before you publish — quick checks">
+          <ul className="space-y-1.5">
+            {output.successChecks.map((c, i) => (
+              <li key={i} className="flex items-start gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold/70" />
+                <span>{c}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
 
       <Section title="Shot List">
         <ol className="space-y-2 text-sm">
@@ -239,4 +314,15 @@ function encodeBriefForChecklist(output: PreShootOutput): string {
   const json = JSON.stringify(payload);
   const b64 = btoa(unescape(encodeURIComponent(json)));
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function NoteCard({ icon: Icon, label, body }: { icon: typeof Wand2; label: string; body: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-surface p-3">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-gold/80">
+        <Icon className="h-3 w-3" /> {label}
+      </div>
+      <div className="mt-1 text-sm text-text/90">{body}</div>
+    </div>
+  );
 }

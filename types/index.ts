@@ -24,7 +24,7 @@ export interface PreShootInput {
 }
 
 export interface Hook {
-  type: "curiosity" | "contrarian" | "stakes";
+  type: "curiosity" | "contrarian" | "stakes" | "voyeur" | "transformation";
   line: string;
   whyItWorks: string;
 }
@@ -41,6 +41,16 @@ export interface ThumbnailDirection {
   emotionalTone: string;
 }
 
+export interface BRollItem { shot: string; whyItHelps?: string; }
+export interface FilmingNotes {
+  gear?: string;
+  lighting?: string;
+  timeOfDay?: string;
+  soundCapture?: string;
+  riskCalls?: string;
+}
+export interface OpenerVariant { line: string; feel: string; }
+
 export interface PreShootOutput {
   hooks: Hook[];
   shotList: ShotListItem[];
@@ -48,6 +58,11 @@ export interface PreShootOutput {
   thumbnailDirection: ThumbnailDirection;
   pitch: string;
   localRelevanceNotes: string[];
+  /* World-class enrichments — all optional, backward-compatible. */
+  bRollList?: BRollItem[];
+  filmingNotes?: FilmingNotes;
+  openerVariants?: OpenerVariant[];
+  successChecks?: string[];
 }
 
 export interface PostUploadInput {

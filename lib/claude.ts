@@ -16,13 +16,13 @@ const PreShootOutputSchema = z.object({
   hooks: z
     .array(
       z.object({
-        type: z.enum(["curiosity", "contrarian", "stakes"]),
+        type: z.enum(["curiosity", "contrarian", "stakes", "voyeur", "transformation"]),
         line: z.string(),
         whyItWorks: z.string(),
       })
     )
     .min(3)
-    .max(3),
+    .max(5),
   shotList: z
     .array(
       z.object({
@@ -40,6 +40,23 @@ const PreShootOutputSchema = z.object({
   }),
   pitch: z.string(),
   localRelevanceNotes: z.array(z.string()),
+  /* Optional enrichments — all backward-compatible. Old briefs in history still parse. */
+  bRollList: z
+    .array(z.object({ shot: z.string(), whyItHelps: z.string().optional() }))
+    .optional(),
+  filmingNotes: z
+    .object({
+      gear: z.string().optional(),
+      lighting: z.string().optional(),
+      timeOfDay: z.string().optional(),
+      soundCapture: z.string().optional(),
+      riskCalls: z.string().optional(),
+    })
+    .optional(),
+  openerVariants: z
+    .array(z.object({ line: z.string(), feel: z.string() }))
+    .optional(),
+  successChecks: z.array(z.string()).optional(),
 });
 
 const PostUploadOutputSchema = z.object({
@@ -136,7 +153,57 @@ export async function generatePreShoot(
   const { system, user } = buildPreShootPrompt(input, ctx);
   const raw = await callClaude(system, user);
   const json = extractJson(raw);
-  return PreShootOutputSchema.parse(json) as PreShootOutput;
+
+  // Try strict parse first
+  const first = PreShootOutputSchema.safeParse(json);
+  if (first.success) return first.data as PreShootOutput;
+
+  // One automated repair attempt: tell Claude exactly what's missing and ask for the same JSON back, fixed.
+  const repairUser = `Your previous response failed schema validation. Here is the validation error:
+
+${JSON.stringify(first.error.flatten(), null, 2)}
+
+Here is the previous JSON you returned:
+
+${JSON.stringify(json, null, 2)}
+
+Return the EXACT same content, but with every required field present. Add nothing, remove nothing, just fill in the missing or invalid fields. Output only valid JSON, no prose, no markdown fences.`;
+  const repaired = await callClaude(system, repairUser);
+  const repairedJson = extractJson(repaired);
+  const second = PreShootOutputSchema.safeParse(repairedJson);
+  if (second.success) return second.data as PreShootOutput;
+
+  // Last-resort backfill: fill missing whyItWorks / fields with sensible defaults so the user gets SOMETHING.
+  // Better to hand them a brief that's 95% perfect than throw.
+  const filled = backfillPreShoot(json as Record<string, unknown>);
+  const third = PreShootOutputSchema.safeParse(filled);
+  if (third.success) return third.data as PreShootOutput;
+
+  // Truly broken — surface a clean error the page can show as friendly UX.
+  throw new Error("The brief generator returned an output we couldn\u2019t fully parse. Please try again — the model occasionally drops a field, and a regenerate almost always fixes it.");
+}
+
+/* Defensive backfill: fills the most common missing fields so old broken briefs
+   still surface to the user instead of throwing. Only fires after BOTH strict
+   parse + auto-repair have failed. */
+function backfillPreShoot(obj: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...obj } as Record<string, unknown>;
+  const hooks = Array.isArray(next.hooks) ? (next.hooks as Array<Record<string, unknown>>) : [];
+  next.hooks = hooks.map((h) => ({
+    type: typeof h.type === "string" ? h.type : "curiosity",
+    line: typeof h.line === "string" ? h.line : "(missing hook line)",
+    whyItWorks: typeof h.whyItWorks === "string" ? h.whyItWorks : "Drives curiosity in the first 3 seconds.",
+  }));
+  if (!Array.isArray(next.shotList)) next.shotList = [];
+  if (!Array.isArray(next.titleOptions) || next.titleOptions.length < 3) {
+    next.titleOptions = (next.titleOptions as string[] | undefined ?? []).concat(["Untitled", "Untitled", "Untitled"]).slice(0, 3);
+  }
+  if (typeof next.pitch !== "string") next.pitch = "(pitch unavailable — please regenerate)";
+  if (!Array.isArray(next.localRelevanceNotes)) next.localRelevanceNotes = [];
+  if (!next.thumbnailDirection || typeof next.thumbnailDirection !== "object") {
+    next.thumbnailDirection = { momentTimestamp: "0:00", overlayText: "", emotionalTone: "" };
+  }
+  return next;
 }
 
 export async function generatePostUpload(

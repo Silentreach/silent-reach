@@ -36,6 +36,10 @@ export default function PreShootPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    return generate();
+  }
+
+  async function generate() {
     setLoading(true);
     setError(null);
     setOutput(null);
