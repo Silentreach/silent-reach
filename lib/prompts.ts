@@ -12,12 +12,12 @@ function userContextPreamble(ctx?: UserContext): string {
       .map((s, i) => `  ${i + 1}. ${s.trim()}`)
       .join("\n");
     parts.push(
-      `THE USER'S VOICE — these are real captions/hooks the user has written before. Match this voice exactly: vocabulary, sentence length, rhythm, emoji policy, opening style, signature phrases. Do NOT default to generic LLM phrasings ("elevated," "stunning," "in today's market," "let's dive in").\n${numbered}`
+      `Match this user's voice exactly in every output string (vocabulary, rhythm, emoji policy, sentence length). Avoid generic LLM phrasings like "elevated", "stunning", "in today's market", "let's dive in". Their real samples:\n${numbered}`
     );
   }
 
   if (ctx.voiceNotes && ctx.voiceNotes.trim()) {
-    parts.push(`Additional voice rules from the user (treat as binding):\n${ctx.voiceNotes.trim()}`);
+    parts.push(`Additional voice rules (treat as binding):\n${ctx.voiceNotes.trim()}`);
   }
 
   if (ctx.brand) {
@@ -28,14 +28,12 @@ function userContextPreamble(ctx?: UserContext): string {
     if (b.primaryColor) brandLines.push(`Primary color: ${b.primaryColor}`);
     if (b.secondaryColor) brandLines.push(`Secondary color: ${b.secondaryColor}`);
     if (brandLines.length > 0) {
-      parts.push(
-        `BRAND CONTEXT — incorporate naturally where appropriate (e.g. thumbnail color guidance, sign-off, brand mention if user typically signs reels):\n${brandLines.join("\n")}`
-      );
+      parts.push(`Brand context (apply where natural — thumbnail palette, sign-offs):\n${brandLines.join("\n")}`);
     }
   }
 
   if (parts.length === 0) return "";
-  return `\n\n=== USER CONTEXT (highest-priority instructions, override defaults) ===\n${parts.join("\n\n")}\n=== END USER CONTEXT ===\n`;
+  return `\n\nWriter context for this user:\n${parts.join("\n\n")}`;
 }
 
 
@@ -52,7 +50,7 @@ Hard rules:
 - Titles must be under 60 characters and written in the voice of a local, trustworthy videographer - not a corporate marketer.
 - Thumbnail direction names a specific moment in the video (not "add text saying wow"); it names the timestamp to grab the frame from, the overlay text (under 5 words), and the emotional tone.
 - Local relevance notes must use actual Victoria BC neighborhoods, realtor board vocabulary, and terms homeowners in this market actually search.
-- Return strict JSON matching the schema. No prose outside the JSON. No markdown fences.${userContextPreamble(ctx)}`;
+- Return strict JSON matching the schema. No prose outside the JSON. No markdown fences.`;
 
   const detailsLine = input.details
     ? `Additional project details: ${input.details}\n`
@@ -66,7 +64,8 @@ Location context: ${input.location}
 Target video length: ${input.videoLength}
 Primary platform: ${input.platform}
 Concept: ${input.concept}
-${detailsLine}
+${detailsLine}${userContextPreamble(ctx)}
+
 Return only valid JSON matching this exact schema:
 
 {
@@ -120,7 +119,7 @@ Hard rules:
 - Shareable clips: suggest 3 moments (10-20 second ranges) the creator could export as a Reel. For voice-less videos, suggest based on typical real estate reel structure (opening establishing shot, mid-film hero reveal, final payoff) expressed as timestamp ranges. Always provide 3.
 - Suggested tags: 8-12 tags, lowercase, no "#" symbol.
 - Thumbnail recommendation: look at the attached thumbnail image and suggest an upgrade that a designer could execute in Figma/Photoshop/Canva in 10 minutes. Cover: (a) what's currently working, (b) what's weak, (c) a 3-5 word overlay text, (d) alternative composition, (e) mood, (f) TYPOGRAPHY — specific font family (e.g. "Playfair Display Black" or "Barlow Condensed SemiBold"), weight + case (e.g. "All caps with 50 letter-spacing"), text color + treatment (e.g. "Off-white #F5F2E8 with 1px dark stroke and 12% opacity drop shadow"), and positioning (e.g. "Bottom-left third, 8% padding from edges"), (g) DESIGN — a 2-4 color palette as HEX codes (e.g. ["#0A1E2C", "#D4AF37", "#F5F2E8"]), background treatment (e.g. "Soft bottom-to-top vignette from black to transparent over the hero shot"), accent elements (small graphical touches like a thin gold underline, a location pin icon, or none), and aspect notes (YouTube 16:9 main thumbnail vs crop for Shorts). For Silent Story specifically, default to editorial real-estate aesthetics: serif display fonts (Playfair, Cormorant, Bodoni) OR impact condensed sans (Barlow Condensed, Bebas Neue), generous letter-spacing, warm off-white or gold text over darkened hero shot, two-tone palette anchored to Silent Story's gold #D4AF37 and a deep neutral. Never suggest generic "bold yellow text" without a specific named font and hex.
-- Return strict JSON matching the schema. No prose outside the JSON. No markdown fences.${userContextPreamble(ctx)}`;
+- Return strict JSON matching the schema. No prose outside the JSON. No markdown fences.`;
 
   const audience =
     overrides.audience ||
@@ -152,6 +151,8 @@ ${contextBlock}
 ${transcriptBlock}
 
 The video's thumbnail is attached as an image. Use it as your primary visual reference.
+
+${userContextPreamble(ctx)}
 
 Return only valid JSON matching this exact schema:
 
