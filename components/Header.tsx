@@ -15,6 +15,7 @@ const NAV: NavItem[] = [
   { href: "/pre-shoot",        label: "Brief",       pillar: "pre" },
   { href: "/production",       label: "Production",  pillar: "prod" },
   { href: "/post-upload",      label: "Pack",        pillar: "post" },
+  { href: "/reel-multiplier",  label: "Multiplier",pillar: "post" },
   { href: "/thumbnail-studio", label: "Thumbnails",  pillar: "post" },
   { href: "/library",          label: "Library",   pillar: "post" },
   { href: "/dashboard",        label: "Dashboard"              },

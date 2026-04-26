@@ -170,3 +170,66 @@ export interface UserContext {
     logoDataUrl?: string;            // small data URL (resized)
   };
 }
+
+/* ───────── Reel Multiplier — v1 ─────────
+   Upload one source video, get three platform-tuned reel packages
+   (Instagram Reel, YouTube Short, Facebook Reel) — each with its own
+   cut markers, captions, hashtags, music suggestions, posting time. */
+
+export type ReelPlatform = "instagram_reel" | "youtube_short" | "facebook_reel";
+
+export interface ReelCutMarker {
+  startSec: number;
+  endSec: number;
+  reason?: string;
+}
+
+export interface ReelThumbnailMoment {
+  timestampSec: number;
+  overlayText: string;
+  reason: string;
+}
+
+export interface ReelMusicSuggestion {
+  mood: string;            // e.g. "warm acoustic"
+  genre: string;           // e.g. "ambient folk"
+  bpm?: number;            // approximate beats per minute
+  instrumentation: string; // e.g. "fingerpicked acoustic guitar + light piano"
+  similarTo?: string;      // a referent (artist or track type)
+  searchQuery: string;     // for use against Epidemic Sound / Artlist / YouTube Audio Library
+  licensingNote?: string;  // short reminder per source
+}
+
+export interface ReelPostingTime {
+  window: string;          // e.g. "Tuesday 7-9pm PT"
+  rationale: string;       // why this window
+}
+
+export interface ReelPackage {
+  platform: ReelPlatform;
+  title?: string;          // YouTube Short needs a title; IG/FB don't
+  hookLine: string;        // first 3 seconds overlay text
+  caption: string;         // platform-tuned caption body
+  description?: string;    // YouTube long form, optional for others
+  hashtags: string[];      // 8-12 platform-appropriate hashtags
+  cutMarkers: ReelCutMarker[];
+  thumbnailMoments: ReelThumbnailMoment[];   // 3-5 candidates
+  musicSuggestions: ReelMusicSuggestion[];    // 2-4 suggestions
+  postingTime: ReelPostingTime;
+  firstComment: string;    // pre-written first comment to seed engagement
+  burnableCaptionHints?: string;
+}
+
+export interface ReelMultiplierInput {
+  sourceDurationSec: number;
+  description?: string;    // optional 1-2 sentence creator description
+  series?: string;
+}
+
+export interface ReelMultiplierOutput {
+  source: { durationSec: number; description?: string };
+  packages: ReelPackage[];     // exactly 3
+  globalNotes?: string;
+  musicLicensingNote: string;  // overarching guidance
+}
+

@@ -1,4 +1,4 @@
-import type { PreShootInput, UserContext, VideoMeta } from "@/types";
+import type { PreShootInput, ReelMultiplierInput, UserContext, VideoMeta } from "@/types";
 
 /* ───────── User-context preamble (voice + brand) ───────── */
 
@@ -236,3 +236,130 @@ Return only valid JSON matching this exact schema:
 
   return { system, user };
 }
+
+/* ───────── Reel Multiplier prompt ─────────
+   Given 6 video frames + creator context, generate 3 platform-tuned
+   reel packages. Each platform gets distinct caption culture, length,
+   pacing, hashtag conventions, and music guidance. */
+
+export function buildReelMultiplierPrompt(
+  input: ReelMultiplierInput,
+  ctx?: UserContext
+): { system: string; user: string } {
+  const system = `You are a senior multi-platform reel producer for Silent Story (premium real estate + renovation video, Victoria BC). The user uploaded a short source video. You\u2019re seeing 6 frames sampled at evenly spaced timestamps. Your job: generate THREE distinct, platform-native reel packages — Instagram Reel, YouTube Short, Facebook Reel — that the user can ship within an hour.
+
+Platform reality (treat as binding):
+- Instagram Reel: max 60s, ideal 20-40s. Hook in first 1.5s. Caption is hook-first, max 2 emoji, 8-12 hashtags including 3-5 niche-specific ones. Music selection happens IN-APP from Meta\u2019s licensed catalog — your music suggestion describes mood/BPM so the user can find similar tracks there.
+- YouTube Short: max 60s, ideal 30-50s. Title required (under 60 chars). Description supports chapter timestamps. Hashtags 4-8, no spam. Use YouTube Audio Library OR licensed source for music; can be embedded in pre-rendered video.
+- Facebook Reel: max 90s, ideal 30-60s. Caption tone slightly more conversational than IG. Music from Meta catalog, same as IG.
+
+Cut craft:
+- Each package gets cutMarkers — startSec/endSec into the source video — that fit the platform\u2019s ideal length and pacing. Different platforms get DIFFERENT cuts. Don\u2019t triplicate the same edit.
+- IG: faster cuts, hook moment in first 1.5s
+- YT: can breathe more, set up a payoff moment at 60-70%
+- FB: looser, slightly more contextual setup
+
+Hooks:
+- hookLine = the first 3 seconds overlay text. Under 8 words. Works without sound.
+
+Captions per platform:
+- Match the user\u2019s voice (see Writer context if provided)
+- IG: hook-first, short paragraphs, 1-2 emoji max, end with a CTA question
+- YT: longer description with chapter timestamps if useful
+- FB: conversational, can be longer, emoji optional
+
+Hashtags:
+- 8-12 for IG (mix of broad, niche, ultra-niche)
+- 4-8 for YT (no spam, no #shorts repetition — YT already knows it\u2019s a short)
+- 6-10 for FB (slightly different culture, often local-region tags)
+
+Thumbnail moments (3-5 per package):
+- For each, name a specific timestamp in the source video, the overlay text (under 5 words, caps), and WHY this frame stops the scroll
+- Different timestamps for different platforms — IG often wants energy, YT wants storytelling clarity, FB wants relatability
+
+Music suggestions (2-4 per package):
+- Describe the mood, genre, BPM range, instrumentation
+- Provide a searchQuery the user can paste into Epidemic Sound, Artlist, or YouTube Audio Library
+- Note the licensing path: in-app catalog (IG/FB) or licensed source (YT)
+- Never name a copyrighted track unless it\u2019s explicitly royalty-free or in the platform\u2019s licensed library
+
+Posting time:
+- One window per platform (e.g. \"Tuesday 7-9pm PT\") + one-sentence rationale based on the audience (real estate buyers in Victoria BC, scrolling after dinner)
+
+First comment (one per package):
+- A pre-written first comment the user drops the moment they post. Should match user voice. Should bait engagement without sounding like bait.
+
+OUTPUT: strict JSON, exactly 3 packages in this order: instagram_reel, youtube_short, facebook_reel. No prose outside JSON. No markdown fences.`;
+
+  const dur = Math.round(input.sourceDurationSec);
+  const desc = input.description?.trim();
+  const series = input.series?.trim();
+
+  const user = `Source video duration: ${dur} seconds.${
+    desc ? `\nCreator description: ${desc}` : ""
+  }${series ? `\nSeries / project: ${series}` : ""}
+
+Frames are attached above in order (frame 1 = earliest, frame 6 = latest).
+
+Return JSON in this exact shape:
+
+{
+  "source": { "durationSec": ${dur}, "description": ${JSON.stringify(desc || "")} },
+  "packages": [
+    {
+      "platform": "instagram_reel",
+      "hookLine": "string (\u22648 words, first 3s overlay)",
+      "caption": "string (IG-tuned, hook-first, max 2 emoji)",
+      "hashtags": ["string", "string", "string", "string", "string", "string", "string", "string"],
+      "cutMarkers": [{ "startSec": 0, "endSec": 30, "reason": "string" }],
+      "thumbnailMoments": [
+        { "timestampSec": 0, "overlayText": "STRING <5 WORDS", "reason": "string" }
+      ],
+      "musicSuggestions": [
+        { "mood": "string", "genre": "string", "bpm": 0, "instrumentation": "string", "similarTo": "string", "searchQuery": "string for in-app or external library search", "licensingNote": "string" }
+      ],
+      "postingTime": { "window": "string", "rationale": "string" },
+      "firstComment": "string"
+    },
+    {
+      "platform": "youtube_short",
+      "title": "string (under 60 chars)",
+      "hookLine": "string",
+      "caption": "string (YT-tuned)",
+      "description": "string (longer, optional chapter timestamps)",
+      "hashtags": ["string", "string", "string", "string"],
+      "cutMarkers": [{ "startSec": 0, "endSec": 0, "reason": "string" }],
+      "thumbnailMoments": [
+        { "timestampSec": 0, "overlayText": "string", "reason": "string" }
+      ],
+      "musicSuggestions": [
+        { "mood": "string", "genre": "string", "bpm": 0, "instrumentation": "string", "similarTo": "string", "searchQuery": "string", "licensingNote": "string" }
+      ],
+      "postingTime": { "window": "string", "rationale": "string" },
+      "firstComment": "string"
+    },
+    {
+      "platform": "facebook_reel",
+      "hookLine": "string",
+      "caption": "string (FB-tuned, conversational)",
+      "hashtags": ["string", "string", "string", "string", "string", "string"],
+      "cutMarkers": [{ "startSec": 0, "endSec": 0, "reason": "string" }],
+      "thumbnailMoments": [
+        { "timestampSec": 0, "overlayText": "string", "reason": "string" }
+      ],
+      "musicSuggestions": [
+        { "mood": "string", "genre": "string", "bpm": 0, "instrumentation": "string", "similarTo": "string", "searchQuery": "string", "licensingNote": "string" }
+      ],
+      "postingTime": { "window": "string", "rationale": "string" },
+      "firstComment": "string"
+    }
+  ],
+  "globalNotes": "string (anything that applies to all 3 packages, e.g. consistent visual language across platforms)",
+  "musicLicensingNote": "string (one short paragraph reminding the creator: in-app music for IG/FB plays nice with the algorithm; for YT pre-rendered embeds use YouTube Audio Library or a licensed catalog like Epidemic Sound; never embed copyrighted commercial tracks)"
+}${userContextPreamble(ctx)}
+
+Return only valid JSON. No prose. No markdown fences.`;
+
+  return { system, user };
+}
+

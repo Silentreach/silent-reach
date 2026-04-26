@@ -1,11 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { buildPreShootPrompt, buildPostUploadPrompt } from "./prompts";
+import { buildPreShootPrompt, buildPostUploadPrompt, buildReelMultiplierPrompt } from "./prompts";
 import { extractJson } from "./utils";
 import type {
   PreShootInput,
   PreShootOutput,
   PostUploadOutput,
+  ReelMultiplierInput,
+  ReelMultiplierOutput,
   UserContext,
   VideoMeta,
 } from "@/types";
@@ -114,7 +116,7 @@ type ImageContent = {
 async function callClaude(
   system: string,
   user: string,
-  image?: ImageContent
+  imageOrImages?: ImageContent | ImageContent[]
 ): Promise<string> {
   const client = getClient();
   type ImageBlock = {
@@ -123,7 +125,10 @@ async function callClaude(
   };
   type TextBlock = { type: "text"; text: string };
   const userContent: (ImageBlock | TextBlock)[] = [];
-  if (image) {
+  const images = imageOrImages
+    ? (Array.isArray(imageOrImages) ? imageOrImages : [imageOrImages])
+    : [];
+  for (const image of images) {
     userContent.push({
       type: "image",
       source: {
@@ -208,3 +213,83 @@ export async function generatePostUpload(
   const json = extractJson(raw);
   return PostUploadOutputSchema.parse(json) as PostUploadOutput;
 }
+
+/* ───────── Reel Multiplier output schema + generator ───────── */
+
+const ReelMusicSuggestionSchema = z.object({
+  mood: z.string(),
+  genre: z.string(),
+  bpm: z.number().optional(),
+  instrumentation: z.string(),
+  similarTo: z.string().optional(),
+  searchQuery: z.string(),
+  licensingNote: z.string().optional(),
+});
+
+const ReelPackageSchema = z.object({
+  platform: z.enum(["instagram_reel", "youtube_short", "facebook_reel"]),
+  title: z.string().optional(),
+  hookLine: z.string(),
+  caption: z.string(),
+  description: z.string().optional(),
+  hashtags: z.array(z.string()).min(2),
+  cutMarkers: z.array(z.object({
+    startSec: z.number(),
+    endSec: z.number(),
+    reason: z.string().optional(),
+  })).min(1),
+  thumbnailMoments: z.array(z.object({
+    timestampSec: z.number(),
+    overlayText: z.string(),
+    reason: z.string(),
+  })).min(1),
+  musicSuggestions: z.array(ReelMusicSuggestionSchema).min(1),
+  postingTime: z.object({
+    window: z.string(),
+    rationale: z.string(),
+  }),
+  firstComment: z.string(),
+  burnableCaptionHints: z.string().optional(),
+});
+
+const ReelMultiplierOutputSchema = z.object({
+  source: z.object({
+    durationSec: z.number(),
+    description: z.string().optional(),
+  }),
+  packages: z.array(ReelPackageSchema).min(3).max(3),
+  globalNotes: z.string().optional(),
+  musicLicensingNote: z.string(),
+});
+
+export async function generateReelMultiplier(
+  input: ReelMultiplierInput,
+  frames: ImageContent[],
+  ctx?: UserContext
+): Promise<ReelMultiplierOutput> {
+  if (frames.length === 0) {
+    throw new Error("Reel Multiplier needs at least one frame from the source video.");
+  }
+  const { system, user } = buildReelMultiplierPrompt(input, ctx);
+  const raw = await callClaude(system, user, frames);
+  const json = extractJson(raw);
+  const parsed = ReelMultiplierOutputSchema.safeParse(json);
+  if (parsed.success) return parsed.data as ReelMultiplierOutput;
+  // No auto-repair (richer call already eats most of our 60s budget). Backfill fixes light cases.
+  const filled = backfillReelMultiplier(json as Record<string, unknown>, input);
+  const second = ReelMultiplierOutputSchema.safeParse(filled);
+  if (second.success) return second.data as ReelMultiplierOutput;
+  throw new Error("The reel generator returned an output we couldn\u2019t fully parse. Please try again.");
+}
+
+function backfillReelMultiplier(obj: Record<string, unknown>, input: ReelMultiplierInput): Record<string, unknown> {
+  const next = { ...obj };
+  if (!next.source || typeof next.source !== "object") {
+    next.source = { durationSec: input.sourceDurationSec, description: input.description };
+  }
+  if (!next.musicLicensingNote) {
+    next.musicLicensingNote = "Use Instagram or Facebook\u2019s in-app licensed audio library for those platforms. For pre-rendered YouTube embeds, use YouTube Audio Library, Epidemic Sound, or Artlist. Never embed copyrighted commercial tracks in pre-rendered files.";
+  }
+  return next;
+}
+
