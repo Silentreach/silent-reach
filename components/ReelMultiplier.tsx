@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { getBrandKit } from "@/lib/userContext";
 import { renderReel, downloadBlob } from "@/lib/videoRender";
+import { detectBPM, snapSegmentsToBeats } from "@/lib/audioAnalysis";
 import {
   Upload, Sparkles, Loader2, Film, X, Music, Clock, MessageSquare,
   Hash, Image as ImageIcon, ArrowRight, Instagram, Youtube, Facebook, ExternalLink, Check, Download,
@@ -62,6 +63,8 @@ export default function ReelMultiplier() {
   const [series, setSeries] = useState<string>("");
   const [stage, setStage] = useState<"idle" | "extracting" | "thinking" | "done" | "error">("idle");
   const [musicFile, setMusicFile] = useState<File | null>(null);
+  const [musicBPM, setMusicBPM] = useState<number | null>(null);
+  const [analyzingBPM, setAnalyzingBPM] = useState(false);
   const [customLogo, setCustomLogo] = useState<{kind: "image" | "video"; url: string} | null>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -166,13 +169,13 @@ export default function ReelMultiplier() {
 
             {/* Optional: music + logo for the rendered output */}
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Music track (optional — replaces source audio in the rendered reel)">
+              <Field label="Music track (optional — replaces source audio + drives beat-synced cuts)">
                 <div className="flex items-center gap-2 rounded-md border border-border bg-bg p-2">
                   {musicFile ? (
                     <>
                       <Music className="h-3.5 w-3.5 text-gold" />
                       <span className="flex-1 truncate text-xs text-text/85">{musicFile.name}</span>
-                      <button type="button" onClick={() => setMusicFile(null)} className="text-xs text-muted hover:text-text"><X className="h-3 w-3" /></button>
+                      <button type="button" onClick={() => { setMusicFile(null); setMusicBPM(null); }} className="text-xs text-muted hover:text-text"><X className="h-3 w-3" /></button>
                     </>
                   ) : (
                     <button type="button" onClick={() => musicInputRef.current?.click()} className="flex w-full items-center gap-2 text-xs text-muted hover:text-text">
@@ -180,8 +183,28 @@ export default function ReelMultiplier() {
                     </button>
                   )}
                   <input ref={musicInputRef} type="file" accept="audio/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) setMusicFile(f); }} />
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      setMusicFile(f);
+                      setMusicBPM(null);
+                      setAnalyzingBPM(true);
+                      const bpm = await detectBPM(f).catch(() => null);
+                      setMusicBPM(bpm);
+                      setAnalyzingBPM(false);
+                    }} />
                 </div>
+                {musicFile && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted">
+                    {analyzingBPM ? (
+                      <><Loader2 className="h-3 w-3 animate-spin text-gold" /> Detecting BPM…</>
+                    ) : musicBPM ? (
+                      <><span className="text-gold">♪ {musicBPM.toFixed(1)} BPM</span> · cuts will snap to beats (±0.4s tolerance)</>
+                    ) : (
+                      <>BPM not detected — cuts will use AI markers as-is</>
+                    )}
+                  </div>
+                )}
               </Field>
 
               <Field label="Brand logo (PNG / SVG / MP4 motion logo)">
@@ -255,7 +278,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} />}
     </div>
   );
 }
@@ -306,7 +329,7 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogoDataU
         })}
       </div>
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogo={customLogo} />}
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} />}
 
       {/* Music licensing footer */}
       <div className="rounded-2xl border border-border bg-bg-deep p-5">
@@ -357,9 +380,12 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
         : kit.logoDataUrl
           ? { kind: "image" as const, url: kit.logoDataUrl }
           : undefined;
+      const rawSegments = pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec }));
+      const { adjusted: segments, snapsApplied } = snapSegmentsToBeats(rawSegments, musicBPM, 0.4);
+      void snapsApplied; // surfaced via UI badge; reserved for future logging
       const { blob, mimeType } = await renderReel({
         source: sourceFile,
-        segments: pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec })),
+        segments,
         outputAspect,
         hookLine: pkg.hookLine,
         hookPosition: hookPos,
@@ -394,7 +420,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl 
           <div className="flex-1">
             <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render &amp; download this reel</div>
             <div className="mt-1 font-display text-lg tracking-tight text-text">
-              {pkg.cutMarkers.length} cut{pkg.cutMarkers.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? `music: ${musicFile.name.slice(0, 28)}` : "source audio"}
+              {pkg.cutMarkers.length} cut{pkg.cutMarkers.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM (beat-synced cuts)` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
             </div>
             <p className="mt-1 text-xs text-muted">
               9:16 center-crop · multi-cut stitch · hook text burned in for 3s · audio + video fade out together over 1.5s · {includeOutro && (customLogoDataUrl || getBrandKit().logoDataUrl) ? "animated logo outro at the end" : "no outro"} · WebM output (uploads to YT directly; IG/FB drop in CapCut → re-export as MP4)
