@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { getBrandKit } from "@/lib/userContext";
-import { renderTrimmedReel, downloadBlob } from "@/lib/videoRender";
+import { renderReel, downloadBlob } from "@/lib/videoRender";
 import {
   Upload, Sparkles, Loader2, Film, X, Music, Clock, MessageSquare,
   Hash, Image as ImageIcon, ArrowRight, Instagram, Youtube, Facebook, ExternalLink, Check, Download,
@@ -61,6 +61,10 @@ export default function ReelMultiplier() {
   const [description, setDescription] = useState<string>("");
   const [series, setSeries] = useState<string>("");
   const [stage, setStage] = useState<"idle" | "extracting" | "thinking" | "done" | "error">("idle");
+  const [musicFile, setMusicFile] = useState<File | null>(null);
+  const [customLogoDataUrl, setCustomLogoDataUrl] = useState<string | null>(null);
+  const musicInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<ReelMultiplierOutput | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -160,6 +164,49 @@ export default function ReelMultiplier() {
               <input type="text" value={series} onChange={(e) => setSeries(e.target.value)} placeholder="e.g. 868 Orono Avenue" />
             </Field>
 
+            {/* Optional: music + logo for the rendered output */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Music track (optional — replaces source audio in the rendered reel)">
+                <div className="flex items-center gap-2 rounded-md border border-border bg-bg p-2">
+                  {musicFile ? (
+                    <>
+                      <Music className="h-3.5 w-3.5 text-gold" />
+                      <span className="flex-1 truncate text-xs text-text/85">{musicFile.name}</span>
+                      <button type="button" onClick={() => setMusicFile(null)} className="text-xs text-muted hover:text-text"><X className="h-3 w-3" /></button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => musicInputRef.current?.click()} className="flex w-full items-center gap-2 text-xs text-muted hover:text-text">
+                      <Upload className="h-3 w-3" /> Upload .mp3 / .wav / .m4a
+                    </button>
+                  )}
+                  <input ref={musicInputRef} type="file" accept="audio/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) setMusicFile(f); }} />
+                </div>
+              </Field>
+
+              <Field label="Brand logo (optional — corner watermark on rendered reel)">
+                <div className="flex items-center gap-2 rounded-md border border-border bg-bg p-2">
+                  {customLogoDataUrl ? (
+                    <>
+                      <img src={customLogoDataUrl} alt="" className="h-7 w-7 rounded object-contain" />
+                      <span className="flex-1 truncate text-xs text-text/85">Custom logo loaded</span>
+                      <button type="button" onClick={() => setCustomLogoDataUrl(null)} className="text-xs text-muted hover:text-text"><X className="h-3 w-3" /></button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => logoInputRef.current?.click()} className="flex w-full items-center gap-2 text-xs text-muted hover:text-text">
+                      <Upload className="h-3 w-3" /> Upload PNG / SVG (or use Brand Kit)
+                    </button>
+                  )}
+                  <input ref={logoInputRef} type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp" className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      if (f.size > 300 * 1024) { alert("Logo over 300KB — use a smaller file."); return; }
+                      const r = new FileReader(); r.onload = (ev) => setCustomLogoDataUrl(String(ev.target?.result || "")); r.readAsDataURL(f);
+                    }} />
+                </div>
+              </Field>
+            </div>
+
             <div className="flex justify-end">
               <button onClick={generate} disabled={isBusy}
                 className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60">
@@ -193,7 +240,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogoDataUrl={customLogoDataUrl} />}
     </div>
   );
 }
@@ -215,7 +262,7 @@ const PLATFORM_META: Record<ReelPlatform, { label: string; icon: typeof Instagra
   facebook_reel:  { label: "Facebook Reel",  icon: Facebook,  color: "from-blue-500/30 to-sky-500/30" },
 };
 
-function ReelResults({ output, sourceUrl, sourceFile }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null }) {
+function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogoDataUrl }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogoDataUrl: string | null }) {
   const [active, setActive] = useState<ReelPlatform>(output.packages[0]?.platform || "instagram_reel");
   const pkg = output.packages.find((p) => p.platform === active) || output.packages[0];
 
@@ -244,7 +291,7 @@ function ReelResults({ output, sourceUrl, sourceFile }: { output: ReelMultiplier
         })}
       </div>
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} />}
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogoDataUrl={customLogoDataUrl} />}
 
       {/* Music licensing footer */}
       <div className="rounded-2xl border border-border bg-bg-deep p-5">
@@ -266,7 +313,7 @@ function ReelResults({ output, sourceUrl, sourceFile }: { output: ReelMultiplier
   );
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogoDataUrl }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogoDataUrl: string | null }) {
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (label: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(null), 1500); } catch {}
@@ -281,15 +328,21 @@ function PackageCard({ pkg, sourceUrl, sourceFile }: { pkg: ReelPackage; sourceU
   const [renderError, setRenderError] = useState<string | null>(null);
 
   const onRender = async () => {
-    if (!sourceFile || !cut) return;
+    if (!sourceFile || pkg.cutMarkers.length === 0) return;
     setRenderState("rendering"); setRenderPct(0); setRenderError(null);
     try {
       const kit = getBrandKit();
-      const { blob, mimeType } = await renderTrimmedReel({
+      // Aspect: 9:16 for IG/YT/FB reels (all three are vertical)
+      const outputAspect = pkg.platform === "youtube_short" ? "9:16" : "9:16";
+      const logo = customLogoDataUrl || kit.logoDataUrl || undefined;
+      const { blob, mimeType } = await renderReel({
         source: sourceFile,
-        startSec: cut.startSec,
-        endSec: cut.endSec,
-        logoDataUrl: kit.logoDataUrl,
+        segments: pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec })),
+        outputAspect,
+        hookLine: pkg.hookLine,
+        logoDataUrl: logo,
+        musicFile: musicFile || undefined,
+        brandName: !logo ? kit.name : undefined,
         onProgress: (p) => setRenderPct(p),
       });
       const ext = mimeType.includes("mp4") ? "mp4" : "webm";
@@ -312,11 +365,11 @@ function PackageCard({ pkg, sourceUrl, sourceFile }: { pkg: ReelPackage; sourceU
           <div className="flex-1">
             <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render &amp; download this reel</div>
             <div className="mt-1 font-display text-lg tracking-tight text-text">
-              Trim to {fmtSec(cut?.startSec || 0)}–{fmtSec(cut?.endSec || cutLen)} ({cutLen.toFixed(0)}s) · brand logo {getBrandKit().logoDataUrl ? "applied" : "(set in Brand Kit)"}
+              {pkg.cutMarkers.length} cut{pkg.cutMarkers.length === 1 ? "" : "s"}, stitched to 9:16 · {(customLogoDataUrl || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? `music: ${musicFile.name.slice(0, 28)}` : "source audio"}
             </div>
             <p className="mt-1 text-xs text-muted">
-              Renders in your browser — no upload, no server. Output is WebM (works on YouTube directly; for IG/FB drop into CapCut and re-export as MP4 — 10 seconds).
-              Music: add in CapCut after download. (Direct music mux ships next push.)
+              Renders in your browser — no server. Center-cropped to vertical 9:16, hook text burned into the first 3 seconds, all AI cut-markers stitched in order.
+              Output: WebM (uploads natively to YouTube; for IG/FB drop into CapCut and re-export as MP4 in 10 seconds).
             </p>
           </div>
           <button
