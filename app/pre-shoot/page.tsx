@@ -49,9 +49,25 @@ export default function PreShootPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input, userContext: getUserContext() }),
       });
-      const data = await res.json();
+      // Robust to non-JSON responses (e.g. Vercel function timeout returns plain text)
+      let data: { error?: string; output?: PreShootOutput };
+      const ct = res.headers.get("content-type") || "";
+      if (ct.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const txt = await res.text();
+        const isTimeout = /timed?\s*out|FUNCTION_INVOCATION_TIMEOUT|An error occurred/i.test(txt);
+        throw new Error(
+          isTimeout
+            ? "The brief took longer than 60 seconds — usually a transient model slowdown. Try Regenerate."
+            : `Server returned a non-JSON response (HTTP ${res.status}). ${txt.slice(0, 120)}`
+        );
+      }
       if (!res.ok) {
         throw new Error(data.error || `Request failed (${res.status})`);
+      }
+      if (!data.output) {
+        throw new Error("The brief generator returned an empty response. Try Regenerate.");
       }
       setOutput(data.output);
       const id = newId();
