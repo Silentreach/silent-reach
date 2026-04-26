@@ -103,7 +103,7 @@ const PostUploadOutputSchema = z.object({
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set in environment");
-  return new Anthropic({ apiKey, timeout: 30_000, maxRetries: 0 });
+  return new Anthropic({ apiKey, timeout: 55_000, maxRetries: 0 });
 }
 
 type ImageContent = {
@@ -159,29 +159,9 @@ export async function generatePreShoot(
   const first = PreShootOutputSchema.safeParse(json);
   if (first.success) return first.data as PreShootOutput;
 
-  // Auto-repair attempt — but ONLY if we have time left in our budget.
-  // Vercel's serverless function timeout is 60s; we want to leave at least 20s for the repair call.
-  // If the first call took >35s, skip repair and go straight to backfill.
-  const elapsedMs = Date.now() - t0;
-  if (elapsedMs < 35_000) {
-    try {
-      const repairUser = `Your previous response failed schema validation. Here is the validation error:
-
-${JSON.stringify(first.error.flatten(), null, 2)}
-
-Here is the previous JSON you returned:
-
-${JSON.stringify(json, null, 2)}
-
-Return the EXACT same content, but with every required field present. Add nothing, remove nothing, just fill in the missing or invalid fields. Output only valid JSON, no prose, no markdown fences.`;
-      const repaired = await callClaude(system, repairUser);
-      const repairedJson = extractJson(repaired);
-      const second = PreShootOutputSchema.safeParse(repairedJson);
-      if (second.success) return second.data as PreShootOutput;
-    } catch {
-      // Fall through to backfill
-    }
-  }
+  // Skip auto-repair: the new richer prompt eats most of the 60s Vercel budget on the
+  // first call. A second Claude call risks the wall. Backfill is faster and safer.
+  // (Re-enable repair if we ever move to streaming or a longer-running runtime.)
 
   // Last-resort backfill: fill missing whyItWorks / fields with sensible defaults so the user gets SOMETHING.
   // Better to hand them a brief that's 95% perfect than throw.
