@@ -12,7 +12,8 @@ import type {
   VideoMeta,
 } from "@/types";
 
-const MODEL = "claude-sonnet-4-5"; // Update if Anthropic deprecates this ID. Check https://docs.anthropic.com/en/docs/about-claude/models
+const MODEL = "claude-sonnet-4-5"; // Default for high-quality structured generation
+const MODEL_FAST = "claude-haiku-4-5"; // For latency-sensitive multi-image synthesis (Reel Multiplier). 2x faster, sufficient quality.
 
 const PreShootOutputSchema = z.object({
   hooks: z
@@ -116,7 +117,8 @@ type ImageContent = {
 async function callClaude(
   system: string,
   user: string,
-  imageOrImages?: ImageContent | ImageContent[]
+  imageOrImages?: ImageContent | ImageContent[],
+  modelOverride?: string
 ): Promise<string> {
   const client = getClient();
   type ImageBlock = {
@@ -140,7 +142,7 @@ async function callClaude(
   }
   userContent.push({ type: "text", text: user });
   const resp = await client.messages.create({
-    model: MODEL,
+    model: modelOverride || MODEL,
     max_tokens: 5000,
     temperature: 0.7,
     system,
@@ -271,7 +273,9 @@ export async function generateReelMultiplier(
     throw new Error("Reel Multiplier needs at least one frame from the source video.");
   }
   const { system, user } = buildReelMultiplierPrompt(input, ctx);
-  const raw = await callClaude(system, user, frames);
+  // Reel Multiplier uses Haiku (2x faster than Sonnet) — the schema is well-defined
+  // and the synthesis task is forgiving. Switch to MODEL (Sonnet) here if quality drops.
+  const raw = await callClaude(system, user, frames, MODEL_FAST);
   const json = extractJson(raw);
   const parsed = ReelMultiplierOutputSchema.safeParse(json);
   if (parsed.success) return parsed.data as ReelMultiplierOutput;

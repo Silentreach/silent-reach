@@ -273,11 +273,11 @@ Hashtags:
 - 4-8 for YT (no spam, no #shorts repetition — YT already knows it\u2019s a short)
 - 6-10 for FB (slightly different culture, often local-region tags)
 
-Thumbnail moments (3-5 per package):
+Thumbnail moments (2-3 per package):
 - For each, name a specific timestamp in the source video, the overlay text (under 5 words, caps), and WHY this frame stops the scroll
 - Different timestamps for different platforms — IG often wants energy, YT wants storytelling clarity, FB wants relatability
 
-Music suggestions (2-4 per package):
+Music suggestions (2 per package):
 - Describe the mood, genre, BPM range, instrumentation
 - Provide a searchQuery the user can paste into Epidemic Sound, Artlist, or YouTube Audio Library
 - Note the licensing path: in-app catalog (IG/FB) or licensed source (YT)
@@ -299,7 +299,7 @@ OUTPUT: strict JSON, exactly 3 packages in this order: instagram_reel, youtube_s
     desc ? `\nCreator description: ${desc}` : ""
   }${series ? `\nSeries / project: ${series}` : ""}
 
-Frames are attached above in order (frame 1 = earliest, frame 6 = latest).
+Frames attached above in order (frame 1 = opener, frame 4 = payoff).
 
 Return JSON in this exact shape:
 

@@ -11,7 +11,7 @@ import type {
 } from "@/types";
 
 const MAX_DURATION_SEC = 120; // accept up to 2 minutes
-const FRAME_COUNT = 6;
+const FRAME_COUNT = 4;  // Reduced from 6 to fit Haiku call inside Vercel 60s budget
 const FRAME_MAX_W = 720; // resize on capture
 
 interface ExtractedFrame { data: string; mediaType: "image/jpeg" }
