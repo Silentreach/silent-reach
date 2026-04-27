@@ -1,52 +1,50 @@
-import { NextResponse, type NextRequest } from "next/server";
-
-// Basic Auth gate — protects the whole site (including /api/*) from anonymous
-// visitors so stray traffic can't burn Anthropic API credits.
+// Mintflow auth gate (replaces Basic Auth).
 //
-// To enable: set BASIC_AUTH_USER and BASIC_AUTH_PASS in Vercel Env Vars.
-// To disable: delete those env vars (middleware falls through when either is missing).
+// Behavior:
+//   * Refreshes Supabase session cookie on every request.
+//   * Public routes (login, auth callback, invite redemption, static assets)
+//     pass through unauthenticated.
+//   * Everything else requires a signed-in user — anonymous visitors are
+//     redirected to /login.
+//
+// Note on backwards compat: BASIC_AUTH_USER/BASIC_AUTH_PASS env vars are
+// IGNORED now. Remove them from Vercel after Supabase auth is verified live.
 
-export function middleware(req: NextRequest) {
-  const user = process.env.BASIC_AUTH_USER;
-  const pass = process.env.BASIC_AUTH_PASS;
+import { NextResponse, type NextRequest } from "next/server";
+import { updateSession } from "./lib/supabase/middleware";
 
-  // Fail-open: if either env var is missing, auth is disabled.
-  // This prevents locking yourself out by accident and lets local dev skip auth.
-  if (!user || !pass) {
-    return NextResponse.next();
-  }
+const PUBLIC_ROUTES = [
+  "/login",
+  "/auth/callback",
+  "/auth/error",
+  "/invite",          // /invite/[code] — invite landing page
+];
 
-  const authHeader = req.headers.get("authorization");
-  if (authHeader) {
-    const [scheme, encoded] = authHeader.split(" ");
-    if (scheme === "Basic" && encoded) {
-      try {
-        // atob() is available in the Edge runtime used by middleware
-        const decoded = atob(encoded);
-        const sepIndex = decoded.indexOf(":");
-        if (sepIndex !== -1) {
-          const u = decoded.slice(0, sepIndex);
-          const p = decoded.slice(sepIndex + 1);
-          if (u === user && p === pass) {
-            return NextResponse.next();
-          }
-        }
-      } catch {
-        /* malformed header — fall through to 401 */
-      }
-    }
-  }
-
-  return new NextResponse("Authentication required", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="Silent Reach", charset="UTF-8"',
-      "Cache-Control": "no-store",
-    },
-  });
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-// Run on everything except Next internal assets and the public logo.
+export async function middleware(request: NextRequest) {
+  const { response, user } = await updateSession(request);
+  const { pathname } = request.nextUrl;
+
+  // Public routes pass through.
+  if (isPublicRoute(pathname)) return response;
+
+  // Anonymous visitors → /login (preserve return path).
+  if (!user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    if (pathname !== "/") url.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  return response;
+}
+
+// Run on every page + API route except Next internals & static assets.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|logo.svg).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|logo.svg|public/).*)",
+  ],
 };

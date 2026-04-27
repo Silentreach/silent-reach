@@ -12,6 +12,8 @@
     "@anthropic-ai/sdk": "^0.27.0",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.105.0",
     "clsx": "^2.1.1",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.445.0",
