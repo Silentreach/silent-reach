@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { getBrandKit } from "@/lib/userContext";
 import { renderReel, downloadBlob } from "@/lib/videoRender";
+import { transcodeWebMToMP4 } from "@/lib/transcoder";
 import { detectBPM, snapSegmentsToBeats } from "@/lib/audioAnalysis";
 import {
   Upload, Sparkles, Loader2, Film, X, Music, Clock, MessageSquare,
@@ -363,6 +364,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
   // Render & Download state
   const [renderState, setRenderState] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [renderPct, setRenderPct] = useState(0);
+  const [renderPhase, setRenderPhase] = useState<"render" | "convert">("render");
   const [renderError, setRenderError] = useState<string | null>(null);
   const [hookPos, setHookPos] = useState<"auto" | "top" | "bottom">("auto");
   const [includeOutro, setIncludeOutro] = useState(true);
@@ -370,7 +372,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
 
   const onRender = async () => {
     if (!sourceFile || pkg.cutMarkers.length === 0) return;
-    setRenderState("rendering"); setRenderPct(0); setRenderError(null);
+    setRenderState("rendering"); setRenderPct(0); setRenderError(null); setRenderPhase("render");
     try {
       const kit = getBrandKit();
       const outputAspect = "9:16" as const;
@@ -400,12 +402,27 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
         fadeOutSec: 1.5,
         onProgress: (p) => setRenderPct(p),
       });
-      const ext = mimeType.includes("mp4") ? "mp4" : "webm";
       const platformShort = pkg.platform === "instagram_reel" ? "ig" : pkg.platform === "youtube_short" ? "yt" : "fb";
       const tag = (pkg.title || pkg.hookLine || "reel").slice(0, 32).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-      downloadBlob(blob, `mintflow_${platformShort}_${tag}.${ext}`);
+
+      // If MediaRecorder gave us native mp4 already (Safari sometimes), just download it.
+      if (mimeType.includes("mp4")) {
+        downloadBlob(blob, `mintflow_${platformShort}_${tag}.mp4`);
+      } else {
+        // Browser-side transcode WebM -> MP4 via ffmpeg.wasm. Fall back to WebM if it fails.
+        setRenderPhase("convert");
+        setRenderPct(0);
+        try {
+          const mp4 = await transcodeWebMToMP4(blob, (pct) => setRenderPct(pct / 100));
+          downloadBlob(mp4, `mintflow_${platformShort}_${tag}.mp4`);
+        } catch (transcodeErr) {
+          // ffmpeg.wasm failed (network, OOM, browser unsupported). Ship the WebM so the user isn't stuck.
+          console.warn("Transcode failed, falling back to WebM", transcodeErr);
+          downloadBlob(blob, `mintflow_${platformShort}_${tag}.webm`);
+        }
+      }
       setRenderState("done");
-      setTimeout(() => setRenderState("idle"), 2500);
+      setTimeout(() => { setRenderState("idle"); setRenderPhase("render"); }, 2500);
     } catch (err: unknown) {
       setRenderError(err instanceof Error ? err.message : "Couldn’t render the reel.");
       setRenderState("error");
@@ -453,7 +470,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
             disabled={renderState === "rendering" || !sourceFile}
             className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60"
           >
-            {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> Rendering {(renderPct * 100).toFixed(0)}%</>}
+            {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> {renderPhase === "convert" ? "Converting" : "Rendering"} {(renderPct * 100).toFixed(0)}%</>}
             {renderState === "done" && <><Check className="h-4 w-4" /> Downloaded</>}
             {renderState === "error" && <><Download className="h-4 w-4" /> Try again</>}
             {renderState === "idle" && <><Download className="h-4 w-4" /> Render &amp; download</>}
