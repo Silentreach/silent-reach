@@ -5,6 +5,9 @@ import { Plus, Trash2, Save, Check, Lightbulb } from "lucide-react";
 import {
   getVoiceSamples, setVoiceSamples,
   getVoiceNotes,   setVoiceNotes,
+  getVoiceStrength,
+  VOICE_SAMPLE_MAX, VOICE_SAMPLE_RECOMMENDED,
+  type VoiceStrength,
 } from "@/lib/userContext";
 
 const PLACEHOLDERS = [
@@ -18,20 +21,38 @@ export default function VoicePage() {
   const [notes, setNotes]     = useState<string>("");
   const [savedTick, setSavedTick] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [strength, setStrength] = useState<VoiceStrength>("none");
+
+  function recomputeStrength(currentSamples: string[]) {
+    const valid = currentSamples.filter((s) => s.trim().length >= 25).length;
+    if (valid === 0) return setStrength("none");
+    if (valid < 3) return setStrength("weak");
+    if (valid < VOICE_SAMPLE_RECOMMENDED) return setStrength("good");
+    setStrength("strong");
+  }
 
   useEffect(() => {
     const s = getVoiceSamples();
     setSamples(s.length > 0 ? s : [""]);
     setNotes(getVoiceNotes());
+    setStrength(getVoiceStrength());
     setLoaded(true);
   }, []);
 
   const update = (i: number, v: string) => {
-    setSamples((prev) => prev.map((s, idx) => (idx === i ? v : s)));
+    setSamples((prev) => {
+      const next = prev.map((s, idx) => (idx === i ? v : s));
+      recomputeStrength(next);
+      return next;
+    });
   };
-  const addRow = () => setSamples((prev) => (prev.length < 8 ? [...prev, ""] : prev));
+  const addRow = () => setSamples((prev) => (prev.length < VOICE_SAMPLE_MAX ? [...prev, ""] : prev));
   const removeRow = (i: number) =>
-    setSamples((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+    setSamples((prev) => {
+      const next = prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev;
+      recomputeStrength(next);
+      return next;
+    });
 
   const save = () => {
     setVoiceSamples(samples);
@@ -47,11 +68,15 @@ export default function VoicePage() {
       {/* Voice samples */}
       <section>
         <header className="mb-4">
-          <h2 className="font-display text-2xl tracking-tight">Your voice samples</h2>
-          <p className="mt-1 text-sm text-muted">
-            Paste 3–8 captions or hooks you wrote yourself. Real ones, not aspirational. Mintflow uses
-            these as the ground truth for how you actually write.
-          </p>
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 className="font-display text-2xl tracking-tight">Your voice samples</h2>
+              <p className="mt-1 text-sm text-muted">
+                Paste 3–{VOICE_SAMPLE_MAX} captions or hooks <em className="text-text/85 not-italic">you wrote yourself</em>. Real ones, not aspirational. The more you give, the more Mintflow's outputs sound like you wrote them.
+              </p>
+            </div>
+            <VoiceStrengthBadge strength={strength} count={samples.filter((s) => s.trim().length >= 25).length} />
+          </div>
         </header>
 
         <div className="space-y-3">
@@ -78,12 +103,12 @@ export default function VoicePage() {
             </div>
           ))}
 
-          {samples.length < 8 && (
+          {samples.length < VOICE_SAMPLE_MAX && (
             <button
               onClick={addRow}
               className="inline-flex items-center gap-1.5 rounded-full border border-border-strong px-3 py-1.5 text-xs text-muted transition hover:border-gold/60 hover:text-gold"
             >
-              <Plus className="h-3 w-3" /> Add another sample
+              <Plus className="h-3 w-3" /> Add another sample <span className="text-[10px] text-muted/60">({samples.length}/{VOICE_SAMPLE_MAX})</span>
             </button>
           )}
         </div>
@@ -125,6 +150,47 @@ export default function VoicePage() {
           {savedTick ? "Saved" : "Save voice"}
         </button>
       </div>
+    </div>
+  );
+}
+function VoiceStrengthBadge({ strength, count }: { strength: VoiceStrength; count: number }) {
+  const meta: Record<VoiceStrength, { label: string; tone: string; bar: string; tip: string }> = {
+    none: {
+      label: "No voice yet",
+      tone: "border-border bg-bg-deep text-muted",
+      bar: "w-0 bg-border",
+      tip: "Add your first 3 captions",
+    },
+    weak: {
+      label: "Weak signal",
+      tone: "border-amber-700/50 bg-amber-950/30 text-amber-300",
+      bar: "w-1/4 bg-amber-500",
+      tip: "Add a few more",
+    },
+    good: {
+      label: "Good voice",
+      tone: "border-gold/40 bg-gold/10 text-gold",
+      bar: "w-2/3 bg-gold",
+      tip: "Push to 12+ for STRONG",
+    },
+    strong: {
+      label: "Strong voice",
+      tone: "border-emerald-700/50 bg-emerald-950/30 text-emerald-300",
+      bar: "w-full bg-emerald-400",
+      tip: "Outputs will sound like you",
+    },
+  };
+  const m = meta[strength];
+  return (
+    <div className={`flex w-44 shrink-0 flex-col gap-1.5 rounded-lg border ${m.tone} px-3 py-2`}>
+      <div className="flex items-baseline justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-widest">{m.label}</span>
+        <span className="text-[10px] opacity-70">{count}/{VOICE_SAMPLE_RECOMMENDED}+</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-border/60">
+        <div className={`h-full transition-[width] duration-500 ${m.bar}`} />
+      </div>
+      <div className="text-[10px] opacity-80">{m.tip}</div>
     </div>
   );
 }

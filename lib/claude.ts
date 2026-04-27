@@ -114,6 +114,11 @@ type ImageContent = {
   data: string;
 };
 
+type FrameWithMotion = ImageContent & {
+  timestampSec?: number;
+  motionDelta?: number;
+};
+
 async function callClaude(
   system: string,
   user: string,
@@ -271,16 +276,25 @@ const ReelMultiplierOutputSchema = z.object({
 
 export async function generateReelMultiplier(
   input: ReelMultiplierInput,
-  frames: ImageContent[],
+  frames: FrameWithMotion[],
   ctx?: UserContext
 ): Promise<ReelMultiplierOutput> {
   if (frames.length === 0) {
     throw new Error("Reel Multiplier needs at least one frame from the source video.");
   }
-  const { system, user } = buildReelMultiplierPrompt(input, ctx);
+  // Pass motion+timestamp metadata into the prompt builder so the AI knows which
+  // frames are visually dynamic (probable highlight moments) vs static (B-roll).
+  const frameMeta = frames.map((f, i) => ({
+    index: i,
+    timestampSec: f.timestampSec,
+    motionDelta: f.motionDelta,
+  }));
+  const { system, user } = buildReelMultiplierPrompt(input, ctx, frameMeta);
+  // Strip motion metadata before passing to Claude vision — it only needs mediaType + data.
+  const visionFrames: ImageContent[] = frames.map((f) => ({ mediaType: f.mediaType, data: f.data }));
   // Reel Multiplier uses Haiku (2x faster than Sonnet) — the schema is well-defined
   // and the synthesis task is forgiving. Switch to MODEL (Sonnet) here if quality drops.
-  const raw = await callClaude(system, user, frames, MODEL_FAST);
+  const raw = await callClaude(system, user, visionFrames, MODEL_FAST);
   const json = extractJson(raw);
   const parsed = ReelMultiplierOutputSchema.safeParse(json);
   if (parsed.success) return parsed.data as ReelMultiplierOutput;

@@ -20,10 +20,30 @@ export function getVoiceSamples(): string[] {
   }
 }
 
+export const VOICE_SAMPLE_MAX = 20;
+export const VOICE_SAMPLE_RECOMMENDED = 12;
+
 export function setVoiceSamples(samples: string[]) {
   if (typeof window === "undefined") return;
-  const cleaned = samples.map((s) => s.trim()).filter(Boolean).slice(0, 8);
+  const cleaned = samples.map((s) => s.trim()).filter(Boolean).slice(0, VOICE_SAMPLE_MAX);
   localStorage.setItem(VOICE_KEY, JSON.stringify(cleaned));
+}
+
+/**
+ * Voice training strength assessment. Drives the per-user prompt fine-tuning:
+ * the stronger the voice signal, the more aggressively the prompt insists the
+ * AI mimic the user's actual cadence. With <3 samples the prompt only does a
+ * gentle nudge; with 12+ it becomes a hard constraint.
+ */
+export type VoiceStrength = "none" | "weak" | "good" | "strong";
+
+export function getVoiceStrength(): VoiceStrength {
+  const samples = getVoiceSamples();
+  const valid = samples.filter((s) => s.trim().length >= 25); // a real caption, not a fragment
+  if (valid.length === 0) return "none";
+  if (valid.length < 3) return "weak";
+  if (valid.length < VOICE_SAMPLE_RECOMMENDED) return "good";
+  return "strong";
 }
 
 export function getVoiceNotes(): string {

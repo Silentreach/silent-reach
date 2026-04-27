@@ -1,5 +1,15 @@
 "use client";
 
+/* Browser-side reel renderer with cinematic finish:
+   - 9:16 (or 1:1, 16:9) output via center-crop fit
+   - Multi-segment stitching from AI cut markers
+   - Hook overlay text — top OR bottom, platform-aware
+   - Brand logo corner watermark throughout
+   - Animated logo OUTRO (2s end card) if logo provided
+   - Audio + video FADE OUT in last 1.5s of main timeline
+   - Music upload OR source audio, both routed through Web Audio
+     so both can be cleanly faded */
+
 export interface Segment { startSec: number; endSec: number; }
 export type OutputAspect = "9:16" | "1:1" | "16:9";
 export type HookPosition = "top" | "bottom" | "auto";
@@ -9,6 +19,7 @@ export type LogoKind = "image" | "video";
 
 export interface LogoSource {
   kind: LogoKind;
+  /** Data URL for images, object URL for videos */
   url: string;
 }
 
@@ -17,17 +28,17 @@ export interface RenderOptions {
   segments: Segment[];
   outputAspect: OutputAspect;
   hookLine?: string;
-  hookPosition?: HookPosition;
-  hookBackground?: HookBackground;
-  hookBackgroundColor?: string;
-  hookStyle?: HookStyle;
+  hookPosition?: HookPosition;        // default "auto"
+  hookBackground?: HookBackground;    // default "none"
+  hookBackgroundColor?: string;       // hex, used when background != "none"
+  hookStyle?: HookStyle;              // default "stagger"
   platform?: "instagram_reel" | "youtube_short" | "facebook_reel";
-  logo?: LogoSource;
+  logo?: LogoSource;                   // image or video logo
   musicFile?: File;
   brandName?: string;
   includeOutro?: boolean;
-  outroDurationSec?: number;
-  fadeOutSec?: number;
+  outroDurationSec?: number;          // default 2.0
+  fadeOutSec?: number;                // default 1.5
   onProgress?: (pct: number) => void;
 }
 
@@ -39,6 +50,9 @@ const ASPECT_DIMS: Record<OutputAspect, { w: number; h: number }> = {
   "16:9": { w: 1920, h: 1080 },
 };
 
+/* Platform-tuned defaults for hook position. Modern IG reels anchor
+   the hook line in the lower third (above the caption gradient).
+   YT Shorts and FB Reels look better with top-third hooks. */
 function resolveHookPosition(p?: HookPosition, platform?: RenderOptions["platform"]): "top" | "bottom" {
   if (p === "top") return "top";
   if (p === "bottom") return "bottom";
@@ -61,12 +75,14 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   const totalMainDur = segments.reduce((acc, s) => acc + Math.max(0, s.endSec - s.startSec), 0);
   const totalRenderDur = totalMainDur + (includeOutro ? outroDurSec : 0);
 
+  /* Source video */
   const sourceUrl = URL.createObjectURL(source);
   const video = document.createElement("video");
   video.src = sourceUrl;
   video.crossOrigin = "anonymous";
   video.playsInline = true;
   video.preload = "auto";
+  // Mute the element so it doesn't double-output to speakers — audio is routed through Web Audio
   video.muted = false;
   video.volume = 0;
   await new Promise<void>((res, rej) => {
@@ -74,12 +90,14 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     video.onerror = () => rej(new Error("Couldn’t read this video file."));
   });
 
+  /* Canvas */
   const canvas = document.createElement("canvas");
   canvas.width = dims.w; canvas.height = dims.h;
   const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) throw new Error("Browser canvas unavailable.");
   ctx.fillStyle = "#000"; ctx.fillRect(0, 0, dims.w, dims.h);
 
+  /* Logo — image OR video (MP4/WebM) */
   let logoImg: HTMLImageElement | null = null;
   let logoVideo: HTMLVideoElement | null = null;
   if (opts.logo?.url) {
@@ -95,6 +113,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     }
   }
 
+  /* Audio path — both music and source go through Web Audio so we can fade either */
   type AudioCtxCtor = typeof AudioContext;
   const AudioCtx = (window.AudioContext || (window as unknown as { webkitAudioContext: AudioCtxCtor }).webkitAudioContext);
   const audioCtx = new AudioCtx();
@@ -112,20 +131,27 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     musicNode.loop = true;
     musicNode.connect(masterGain);
   } else {
+    // Route the video element's audio through Web Audio so we can fade it
     try {
       mediaSourceNode = audioCtx.createMediaElementSource(video);
       mediaSourceNode.connect(masterGain);
-    } catch {}
+    } catch {
+      // Some browsers throw if createMediaElementSource is called twice — fall back to no audio
+    }
   }
 
+  /* Build output stream — canvas video + Web Audio audio */
   const canvasStream = canvas.captureStream(30);
   const outputStream = new MediaStream();
   for (const t of canvasStream.getVideoTracks()) outputStream.addTrack(t);
   for (const t of audioDest.stream.getAudioTracks()) outputStream.addTrack(t);
 
-  // Try MP4 first — Chrome 119+ / Edge 119+ / Safari support natively.
+  /* MediaRecorder */
+  // Try MP4 first — Chrome 119+, Edge 119+, Safari all support it natively.
+  // When MP4 wins here, the ReelMultiplier render flow skips ffmpeg.wasm transcoding
+  // entirely (see the mimeType.includes("mp4") branch in onRender).
   const candidates = [
-    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2", // h264 baseline + AAC-LC, broadest playback
     "video/mp4;codecs=avc1,mp4a",
     "video/mp4;codecs=avc1",
     "video/mp4",
@@ -142,6 +168,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
 
+  /* Phase-driven draw loop (main → outro → stopped) */
   type Phase = "main" | "outro" | "stopped";
   let phase: Phase = "main";
   const renderStartWall = performance.now();
@@ -150,8 +177,8 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   // Per-segment tracking for transitions + Ken Burns
   let currentSegIdx = 0;
   let segmentStartedAt = renderStartWall;
-  const TRANSITION_DUR = 0.18;
-  const KEN_BURNS_AMOUNT = 0.04;
+  const TRANSITION_DUR = 0.18;       // dip-to-black fade in/out at cut boundaries
+  const KEN_BURNS_AMOUNT = 0.04;     // 4% slow zoom over each segment
 
   const drawLoop = () => {
     if (phase === "stopped") return;
@@ -159,17 +186,19 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     const elapsedTotalSec = (nowMs - renderStartWall) / 1000;
 
     if (phase === "main") {
+      // Per-segment progress for Ken Burns + transition timing
       const seg = segments[currentSegIdx];
       const segDur = Math.max(0.001, seg.endSec - seg.startSec);
       const segElapsed = (nowMs - segmentStartedAt) / 1000;
       const segProgress = Math.min(1, Math.max(0, segElapsed / segDur));
       const segRemaining = segDur - segElapsed;
 
-      // Ken Burns: gradual zoom-in (4%) over each cut.
+      // Ken Burns: gradual zoom into center over each cut. Subtle (4%) so it
+      // adds life on still moments without fighting camera motion in moving shots.
       const kenZoom = 1 - KEN_BURNS_AMOUNT * segProgress;
       drawFrame(ctx, video, dims, kenZoom);
 
-      // Cinematic intro fade-in: 0-0.6s starts dark.
+      // Cinematic intro fade-in: 0-0.6s starts dark and reveals the video.
       const INTRO_DUR = 0.6;
       if (elapsedTotalSec < INTRO_DUR) {
         const k = elapsedTotalSec / INTRO_DUR;
@@ -178,11 +207,13 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
         ctx.fillRect(0, 0, dims.w, dims.h);
       }
 
-      // Dip-to-black at cut boundaries.
+      // Dip-to-black at cut boundaries (skip for the first cut's start and last cut's end).
       let transOpacity = 0;
       if (currentSegIdx > 0 && segElapsed < TRANSITION_DUR) {
+        // Fading IN from black at start of new cut
         transOpacity = 1 - (segElapsed / TRANSITION_DUR);
       } else if (currentSegIdx < segments.length - 1 && segRemaining < TRANSITION_DUR) {
+        // Fading OUT to black at end of cut (before next seek)
         transOpacity = 1 - (segRemaining / TRANSITION_DUR);
       }
       if (transOpacity > 0.01) {
@@ -194,6 +225,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
         drawAnimatedHook(ctx, hookLine, dims, hookPos, elapsedTotalSec, opts.hookBackground || "none", opts.hookBackgroundColor, opts.hookStyle || "stagger");
       }
 
+      // Visual fadeout in the last fadeOutSec seconds of MAIN (before outro)
       const remainingMain = totalMainDur - elapsedTotalSec;
       if (remainingMain < fadeOutSec && remainingMain > 0) {
         const a = (fadeOutSec - remainingMain) / fadeOutSec;
@@ -211,6 +243,8 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   };
   requestAnimationFrame(drawLoop);
 
+  /* Schedule audio fadeout to align with the visual one. Music continues
+     into the outro at a lower volume; source audio fades to 0 at end of main. */
   const t0 = audioCtx.currentTime;
   if (musicNode) {
     masterGain.gain.setValueAtTime(0.9, t0);
@@ -226,13 +260,18 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     masterGain.gain.linearRampToValueAtTime(0, t0 + totalMainDur);
   }
 
+  /* Pre-seek to the FIRST segment before we start recording, so the very
+     first recorded frame is already the right shot — no black or pre-roll. */
   await seekTo(video, segments[0].startSec);
   await new Promise((r) => setTimeout(r, 80));
+  // Force one canvas paint with the first seeked frame so the captureStream
+  // has a real frame ready when the recorder starts.
   drawFrame(ctx, video, dims);
 
   recorder.start();
   if (musicNode) musicNode.start();
 
+  /* Walk segments — first segment is already seeked, so just play it. */
   for (let i = 0; i < segments.length; i++) {
     currentSegIdx = i;
     const seg = segments[i];
@@ -244,6 +283,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     await playUntil(video, seg.endSec);
   }
 
+  /* Outro phase */
   if (includeOutro && (logoImg || logoVideo)) {
     outroStartWall = performance.now();
     phase = "outro";
@@ -259,6 +299,8 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   URL.revokeObjectURL(sourceUrl);
   return { blob: new Blob(chunks, { type: mimeType }), mimeType, durationSec: totalRenderDur };
 }
+
+/* ───────── Drawing helpers ───────── */
 
 function drawFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, dims: { w: number; h: number }, kenZoom: number = 1) {
   const sw = video.videoWidth || 1920;
@@ -285,6 +327,10 @@ function drawFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, dims:
   ctx.drawImage(video, sx, sy, scw, sch, 0, 0, dims.w, dims.h);
 }
 
+/* Motion hook overlay — word-by-word stagger reveal:
+   each word fades in + slides up + scales over 0.55s with 90ms stagger between words.
+   Holds, then everything floats up + fades out together over the last 0.5s.
+   Optional rounded-pill or box background behind the text using the brand color. */
 function drawAnimatedHook(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -301,12 +347,13 @@ function drawAnimatedHook(
   }
   const HOLD_END = 2.5;
   const TOTAL = 3.0;
-  const REVEAL_DUR = 0.55;
-  const STAGGER = 0.07;
-  const FADE_OUT_DUR = TOTAL - HOLD_END;
+  const REVEAL_DUR = 0.55;     // each word reveals over this duration
+  const STAGGER = 0.07;        // delay between consecutive words (tighter for snappier reveal)
+  const FADE_OUT_DUR = TOTAL - HOLD_END; // 0.5s tail fade
 
   const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
+  // Group fade-out: applies to all words at the end of the hook
   let groupOpacity = 1;
   let groupYOffset = 0;
   if (elapsedSec > HOLD_END) {
@@ -325,6 +372,7 @@ function drawAnimatedHook(
   ctx.font = `700 ${fontSize}px "Inter Tight", Inter, Helvetica, Arial, sans-serif`;
   ctx.textBaseline = "top";
 
+  // Layout: split into words, then word-wrap into lines preserving word indices
   const wordsRaw = text.split(/\s+/).filter(Boolean);
   const spaceW = ctx.measureText(" ").width;
 
@@ -332,6 +380,7 @@ function drawAnimatedHook(
   const laid: LaidWord[] = [];
   let lineIdx = 0;
   let xCursor = 0;
+  let lineStarts: number[] = [0];
   for (let i = 0; i < wordsRaw.length; i++) {
     const word = wordsRaw[i];
     const wordW = ctx.measureText(word).width;
@@ -340,6 +389,7 @@ function drawAnimatedHook(
     if (!isFirstOnLine && xCursor + advance > maxW) {
       lineIdx++;
       xCursor = 0;
+      lineStarts.push(lineIdx);
       laid.push({ word, lineIdx, x: 0, idxInText: i });
       xCursor = wordW;
     } else {
@@ -355,6 +405,7 @@ function drawAnimatedHook(
     : Math.round(dims.h * 0.78) - blockH;
   const top = baseTop + groupYOffset;
 
+  // Background pill / box — sized to widest line, drawn behind text
   if (bgStyle !== "none") {
     const pad = Math.round(fontSize * 0.5);
     const lineWidths: number[] = new Array(numLines).fill(0);
@@ -374,6 +425,8 @@ function drawAnimatedHook(
     roundRect(ctx, bgX, bgY, bgW, bgH, radius);
     ctx.fill();
   } else {
+    // Transparent bg: paint a soft vertical gradient band behind the text region
+    // so the type is readable on any background without a hard pill.
     const bandPadV = Math.round(fontSize * 0.9);
     const bandTop = Math.max(0, top - bandPadV);
     const bandH = blockH + bandPadV * 2;
@@ -387,13 +440,16 @@ function drawAnimatedHook(
     ctx.fillRect(0, bandTop, dims.w, bandH);
   }
 
+  // Per-word stagger draw
   for (const lw of laid) {
     const wordStart = lw.idxInText * STAGGER;
     const wordProgress = Math.min(1, Math.max(0, (elapsedSec - wordStart) / REVEAL_DUR));
-    if (wordProgress <= 0) continue;
-    const eased = easeOutCubic(wordProgress);
+    if (wordProgress <= 0) continue; // not yet revealed
+    const eased = easeOutCubic(wordProgress); // smooth, no overshoot — feels more cinematic
     const wordOpacity = easeOutCubic(wordProgress) * groupOpacity;
+    // Slide-up by 0.55em, easing back slightly past the rest position
     const slide = (1 - eased) * fontSize * 0.55 * (position === "top" ? -0.4 : 1);
+    // Subtle scale 0.92 -> 1.0 during reveal
     const scale = 0.92 + 0.08 * easeOutCubic(wordProgress);
 
     const wordX = padding + lw.x;
@@ -401,6 +457,7 @@ function drawAnimatedHook(
     const wordW = ctx.measureText(lw.word).width;
 
     ctx.save();
+    // Center scale around the word's center
     ctx.translate(wordX + wordW / 2, wordY + fontSize / 2);
     ctx.scale(scale, scale);
     ctx.translate(-(wordX + wordW / 2), -(wordY + fontSize / 2));
@@ -418,6 +475,10 @@ function drawAnimatedHook(
   ctx.restore();
 }
 
+
+/* Typewriter variant — letters appear one by one with a blinking caret.
+   Used for YT Shorts where the setup arc benefits from a slower, more
+   deliberate reveal. Same 3s timeline (reveal -> hold -> fade out). */
 function drawTypewriterHook(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -429,8 +490,10 @@ function drawTypewriterHook(
 ) {
   const HOLD_END = 2.5;
   const TOTAL = 3.0;
+  // Reveal 0 -> all chars over the first ~1.4s, then hold, then fade out.
   const REVEAL_END = Math.min(1.4, Math.max(0.6, text.length * 0.07));
 
+  // Group fade-out: applies at end of hook
   let groupOpacity = 1;
   let groupYOffset = 0;
   if (elapsedSec > HOLD_END) {
@@ -440,6 +503,7 @@ function drawTypewriterHook(
   }
   if (groupOpacity <= 0.01) return;
 
+  // How many chars are visible right now
   const revealProgress = Math.min(1, Math.max(0, elapsedSec / REVEAL_END));
   const charsVisible = Math.floor(text.length * revealProgress);
   const visible = text.slice(0, charsVisible);
@@ -454,6 +518,7 @@ function drawTypewriterHook(
   ctx.font = `700 ${fontSize}px "Inter Tight", Inter, Helvetica, Arial, sans-serif`;
   ctx.textBaseline = "top";
 
+  // Word-wrap on the visible substring
   const words = visible.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = "";
@@ -471,7 +536,7 @@ function drawTypewriterHook(
     : Math.round(dims.h * 0.78) - blockH;
   const top = baseTop + groupYOffset;
 
-  // Gradient band for readability
+  // Gradient band behind text for readability
   const bandPadV = Math.round(fontSize * 0.9);
   const bandTop = Math.max(0, top - bandPadV);
   const bandH = blockH + bandPadV * 2;
@@ -484,6 +549,7 @@ function drawTypewriterHook(
   ctx.fillStyle = grad;
   ctx.fillRect(0, bandTop, dims.w, bandH);
 
+  // Optional pill/box background
   if (bgStyle !== "none" && lines.length > 0) {
     const pad = Math.round(fontSize * 0.5);
     let widest = 0;
@@ -508,6 +574,7 @@ function drawTypewriterHook(
     ctx.fillText(lines[i], padding, top + i * lineH, maxW);
   }
 
+  // Blinking caret while still typing
   if (isStillTyping) {
     const caretBlink = Math.floor(elapsedSec * 2.5) % 2 === 0;
     if (caretBlink && lines.length > 0) {
@@ -536,6 +603,32 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
+function drawLogo(ctx: CanvasRenderingContext2D, img: HTMLImageElement, dims: { w: number; h: number }) {
+  const lw = Math.round(dims.w * 0.14);
+  const lh = Math.round(lw * (img.naturalHeight / img.naturalWidth));
+  const pad = Math.round(dims.w * 0.03);
+  ctx.save();
+  ctx.globalAlpha = 0.92;
+  ctx.drawImage(img, dims.w - lw - pad, dims.h - lh - pad, lw, lh);
+  ctx.restore();
+}
+
+function drawBrandText(ctx: CanvasRenderingContext2D, text: string, dims: { w: number; h: number }) {
+  const fs = Math.round(dims.w * 0.022);
+  const pad = Math.round(dims.w * 0.04);
+  ctx.save();
+  ctx.font = `600 ${fs}px Inter, Helvetica, Arial, sans-serif`;
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  ctx.shadowColor = "rgba(0,0,0,0.6)";
+  ctx.shadowBlur = 8;
+  ctx.fillText(text.toUpperCase(), dims.w - pad, dims.h - pad);
+  ctx.restore();
+}
+
+/* The motion logo outro: black background, logo zooms in (0.85 → 1),
+   holds, then fades to black. Brand name optionally below. */
 function drawOutroFrame(
   ctx: CanvasRenderingContext2D,
   dims: { w: number; h: number },
@@ -544,20 +637,36 @@ function drawOutroFrame(
   elapsedSec: number,
   totalSec: number,
 ) {
+  // Background
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, dims.w, dims.h);
+
   const t = Math.min(1, Math.max(0, elapsedSec / totalSec));
   let alpha: number, scale: number;
-  if (t < 0.25) { const k = t / 0.25; alpha = k; scale = 0.85 + k * 0.15; }
-  else if (t < 0.7) { alpha = 1; scale = 1; }
-  else { alpha = Math.max(0, 1 - (t - 0.7) / 0.3); scale = 1; }
+  if (t < 0.25) {
+    // Fade in + zoom in
+    const k = t / 0.25;
+    alpha = k;
+    scale = 0.85 + k * 0.15;
+  } else if (t < 0.7) {
+    // Hold
+    alpha = 1;
+    scale = 1;
+  } else {
+    // Fade out
+    alpha = Math.max(0, 1 - (t - 0.7) / 0.3);
+    scale = 1;
+  }
+
   const targetW = Math.round(dims.w * 0.42 * scale);
   const targetH = Math.round(targetW * (logo.naturalHeight / logo.naturalWidth));
   const x = Math.round((dims.w - targetW) / 2);
-  const y = Math.round((dims.h - targetH) / 2 - dims.w * 0.04);
+  const y = Math.round((dims.h - targetH) / 2 - dims.w * 0.04); // slightly above center
+
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.drawImage(logo, x, y, targetW, targetH);
+
   if (brandName) {
     const fs = Math.round(dims.w * 0.028);
     ctx.font = `500 ${fs}px Inter, Helvetica, Arial, sans-serif`;
@@ -566,6 +675,43 @@ function drawOutroFrame(
     ctx.textBaseline = "top";
     ctx.fillText(brandName.toUpperCase(), dims.w / 2, y + targetH + dims.w * 0.025);
   }
+  ctx.restore();
+}
+
+/* ───────── Utilities ───────── */
+
+function seekTo(video: HTMLVideoElement, t: number): Promise<void> {
+  return new Promise((res) => {
+    const handler = () => { video.removeEventListener("seeked", handler); res(); };
+    video.addEventListener("seeked", handler);
+    video.currentTime = Math.max(0, Math.min((video.duration || 9999) - 0.05, t));
+  });
+}
+
+function playUntil(video: HTMLVideoElement, endSec: number): Promise<void> {
+  return new Promise((res, rej) => {
+    let raf = 0;
+    const tick = () => {
+      if (video.ended || video.currentTime >= endSec) {
+        cancelAnimationFrame(raf);
+        try { video.pause(); } catch {}
+        res();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    video.play().then(() => { raf = requestAnimationFrame(tick); }).catch(rej);
+  });
+}
+
+function drawLogoVideo(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, dims: { w: number; h: number }) {
+  const naturalW = video.videoWidth || 1; const naturalH = video.videoHeight || 1;
+  const lw = Math.round(dims.w * 0.18);
+  const lh = Math.round(lw * (naturalH / naturalW));
+  const pad = Math.round(dims.w * 0.03);
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.drawImage(video, dims.w - lw - pad, dims.h - lh - pad, lw, lh);
   ctx.restore();
 }
 
@@ -602,34 +748,14 @@ function drawOutroVideo(
   ctx.restore();
 }
 
-function seekTo(video: HTMLVideoElement, t: number): Promise<void> {
-  return new Promise((res) => {
-    const handler = () => { video.removeEventListener("seeked", handler); res(); };
-    video.addEventListener("seeked", handler);
-    video.currentTime = Math.max(0, Math.min((video.duration || 9999) - 0.05, t));
-  });
-}
-
-function playUntil(video: HTMLVideoElement, endSec: number): Promise<void> {
-  return new Promise((res, rej) => {
-    let raf = 0;
-    const tick = () => {
-      if (video.ended || video.currentTime >= endSec) {
-        cancelAnimationFrame(raf);
-        try { video.pause(); } catch {}
-        res();
-        return;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    video.play().then(() => { raf = requestAnimationFrame(tick); }).catch(rej);
-  });
-}
-
 function loadLogoVideo(src: string): Promise<HTMLVideoElement> {
   return new Promise((res, rej) => {
     const v = document.createElement("video");
-    v.src = src; v.muted = true; v.loop = true; v.playsInline = true; v.crossOrigin = "anonymous";
+    v.src = src;
+    v.muted = true;
+    v.loop = true;
+    v.playsInline = true;
+    v.crossOrigin = "anonymous";
     v.onloadedmetadata = () => res(v);
     v.onerror = () => rej(new Error("Couldn’t load logo video."));
   });

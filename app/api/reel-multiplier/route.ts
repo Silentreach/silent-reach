@@ -8,18 +8,21 @@ import { generateReelMultiplier } from "@/lib/claude";
 const FrameSchema = z.object({
   data: z.string().min(100),
   mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  timestampSec: z.number().min(0).optional(),
+  motionDelta: z.number().min(0).max(1).optional(),
 });
 
 const InputSchema = z.object({
-  sourceDurationSec: z.number().min(3).max(180), // accept 3s-180s; warn longer
+  sourceDurationSec: z.number().min(3).max(180), // accept 3s-180s
   description: z.string().max(800).optional(),
   series: z.string().max(80).optional(),
-  frames: z.array(FrameSchema).min(2).max(8),
+  contentType: z.enum(["real_estate", "construction", "general"]).optional(),
+  frames: z.array(FrameSchema).min(2).max(16),
 });
 
 const UserContextSchema = z
   .object({
-    voiceSamples: z.array(z.string()).max(8).optional(),
+    voiceSamples: z.array(z.string()).max(20).optional(),
     voiceNotes: z.string().max(2000).optional(),
     brand: z
       .object({
@@ -51,9 +54,9 @@ export async function POST(req: NextRequest) {
     );
     const ctx = ctxParsed.success ? ctxParsed.data : undefined;
 
-    const { sourceDurationSec, description, series, frames } = parsed.data;
+    const { sourceDurationSec, description, series, contentType, frames } = parsed.data;
     const output = await generateReelMultiplier(
-      { sourceDurationSec, description, series },
+      { sourceDurationSec, description, series, contentType },
       frames,
       ctx
     );

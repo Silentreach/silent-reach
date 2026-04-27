@@ -58,6 +58,7 @@ export async function transcodeWebMToMP4(
   let lastReported = 0;
   if (onProgress) {
     const t0 = performance.now();
+    // Assume ~25-40s for a 20s 1080p clip on -preset veryfast / single-thread.
     const ESTIMATED_TOTAL_MS = 35_000;
     estimateTimer = setInterval(() => {
       const elapsed = performance.now() - t0;
@@ -75,7 +76,8 @@ export async function transcodeWebMToMP4(
   try {
     await ffmpeg.writeFile(inputName, await fetchFile(webm));
 
-    // -preset veryfast: fast enough to feel responsive, clean output.
+    // -preset veryfast: fast enough to feel responsive, clean output (no
+    // ultrafast blockiness, no `fast`-preset slowness on single-thread wasm).
     // -crf 23: visually transparent for typical reel content.
     // -pix_fmt yuv420p: maximum mobile/social compatibility.
     // -movflags +faststart: moov atom up front so previews start instantly.

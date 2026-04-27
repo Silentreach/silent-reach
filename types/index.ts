@@ -220,10 +220,13 @@ export interface ReelPackage {
   burnableCaptionHints?: string;
 }
 
+export type ReelContentType = "real_estate" | "construction" | "general";
+
 export interface ReelMultiplierInput {
   sourceDurationSec: number;
   description?: string;    // optional 1-2 sentence creator description
   series?: string;
+  contentType?: ReelContentType;  // niche-specific prompt tuning
 }
 
 export interface ReelMultiplierOutput {

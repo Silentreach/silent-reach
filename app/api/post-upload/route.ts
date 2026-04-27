@@ -4,7 +4,7 @@ import { generatePostUpload } from "@/lib/claude";
 
 const UserContextSchema = z
   .object({
-    voiceSamples: z.array(z.string()).max(8).optional(),
+    voiceSamples: z.array(z.string()).max(20).optional(),
     voiceNotes: z.string().max(2000).optional(),
     brand: z
       .object({

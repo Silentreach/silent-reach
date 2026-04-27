@@ -14,12 +14,18 @@ import type {
   ReelMultiplierOutput, ReelPackage, ReelPlatform,
 } from "@/types";
 
-const MAX_DURATION_SEC = 120; // accept up to 2 minutes
-const FRAME_COUNT = 4;  // Reduced from 6 to fit Haiku call inside Vercel 60s budget
-const FRAME_MAX_W = 720; // resize on capture
+const MAX_DURATION_SEC = 180; // accept up to 3 minutes
+const FRAME_COUNT = 12; // 12 frames at 1080p quality gives the AI real context for cut selection
+const FRAME_MAX_W = 640; // smaller per-frame so we can afford 12 of them in one Haiku call
+const MOTION_SAMPLE_W = 96; // tiny resize for cheap pixel-diff motion calc
 
-interface ExtractedFrame { data: string; mediaType: "image/jpeg" }
+interface ExtractedFrame { data: string; mediaType: "image/jpeg"; timestampSec: number; motionDelta: number; }
 
+/**
+ * Extract N frames + compute motion delta between consecutive frames using a tiny
+ * canvas pixel-diff. Motion delta tells the AI which frames are visually dynamic
+ * (probable highlights / camera moves) vs static (probable B-roll filler).
+ */
 async function extractFramesFromFile(file: File): Promise<{ frames: ExtractedFrame[]; durationSec: number }> {
   const url = URL.createObjectURL(file);
   try {
@@ -35,6 +41,7 @@ async function extractFramesFromFile(file: File): Promise<{ frames: ExtractedFra
     const duration = video.duration;
     if (!isFinite(duration) || duration < 2) throw new Error("Video is too short or its duration couldn’t be determined.");
     if (duration > MAX_DURATION_SEC) throw new Error(`Reel Multiplier currently accepts videos up to ${MAX_DURATION_SEC}s. Your video is ${Math.round(duration)}s.`);
+
     const aspect = video.videoHeight / video.videoWidth || 0.5625;
     const w = Math.min(FRAME_MAX_W, video.videoWidth || FRAME_MAX_W);
     const h = Math.round(w * aspect);
@@ -42,16 +49,54 @@ async function extractFramesFromFile(file: File): Promise<{ frames: ExtractedFra
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Browser canvas unavailable.");
-    const frames: ExtractedFrame[] = [];
+
+    // Tiny canvas just for motion-delta calculation (cheap pixel diff)
+    const motionCanvas = document.createElement("canvas");
+    const motionH = Math.round(MOTION_SAMPLE_W * aspect);
+    motionCanvas.width = MOTION_SAMPLE_W; motionCanvas.height = motionH;
+    const motionCtx = motionCanvas.getContext("2d", { willReadFrequently: true });
+    if (!motionCtx) throw new Error("Browser canvas unavailable.");
+
+    const rawFrames: { data: string; timestampSec: number; pixels: Uint8ClampedArray }[] = [];
     for (let i = 0; i < FRAME_COUNT; i++) {
       const t = (duration / (FRAME_COUNT + 1)) * (i + 1);
       video.currentTime = t;
       await new Promise<void>((res) => { video.onseeked = () => res(); });
+      // Full-quality frame for AI vision input
       ctx.drawImage(video, 0, 0, w, h);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
       const base64 = dataUrl.split(",", 2)[1];
-      frames.push({ data: base64, mediaType: "image/jpeg" });
+      // Tiny frame for motion-delta calc
+      motionCtx.drawImage(video, 0, 0, MOTION_SAMPLE_W, motionH);
+      const pixels = motionCtx.getImageData(0, 0, MOTION_SAMPLE_W, motionH).data;
+      rawFrames.push({ data: base64, timestampSec: t, pixels });
     }
+
+    // Compute motion delta: average per-pixel luminance diff vs previous frame.
+    // First frame's delta is 0 (nothing to compare). Normalized 0-1 across the set
+    // so the AI sees relative motion ("frame 7 moved 4x more than frame 1").
+    const rawDeltas: number[] = [0];
+    for (let i = 1; i < rawFrames.length; i++) {
+      const a = rawFrames[i - 1].pixels;
+      const b = rawFrames[i].pixels;
+      let sum = 0;
+      // Skip alpha channel; subsample every 4th pixel for speed
+      for (let p = 0; p < a.length; p += 16) {
+        const lumA = 0.299 * a[p] + 0.587 * a[p + 1] + 0.114 * a[p + 2];
+        const lumB = 0.299 * b[p] + 0.587 * b[p + 1] + 0.114 * b[p + 2];
+        sum += Math.abs(lumA - lumB);
+      }
+      rawDeltas.push(sum / (a.length / 16));
+    }
+    const maxDelta = Math.max(...rawDeltas, 1);
+    const normalized = rawDeltas.map((d) => Math.round((d / maxDelta) * 100) / 100);
+
+    const frames: ExtractedFrame[] = rawFrames.map((f, i) => ({
+      data: f.data,
+      mediaType: "image/jpeg",
+      timestampSec: Math.round(f.timestampSec * 10) / 10,
+      motionDelta: normalized[i],
+    }));
     return { frames, durationSec: duration };
   } finally { URL.revokeObjectURL(url); }
 }
@@ -370,8 +415,34 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
   const [includeOutro, setIncludeOutro] = useState(true);
   const [hookBg, setHookBg] = useState<"none" | "pill" | "box">("none");
 
+  // User-editable overrides — generator → tool. Default to AI's suggestions.
+  const [editedHook, setEditedHook] = useState<string>(pkg.hookLine);
+  const [editedCuts, setEditedCuts] = useState<{ startSec: number; endSec: number; reason?: string }[]>(
+    pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec, reason: c.reason }))
+  );
+
+  function nudgeCut(i: number, field: "startSec" | "endSec", deltaSec: number) {
+    setEditedCuts((prev) => {
+      const next = [...prev];
+      const cur = { ...next[i] };
+      const newVal = Math.max(0, +(cur[field] + deltaSec).toFixed(1));
+      // Sanity: keep start < end with at least 1s between them
+      if (field === "startSec") cur.startSec = Math.min(newVal, cur.endSec - 1);
+      else cur.endSec = Math.max(newVal, cur.startSec + 1);
+      next[i] = cur;
+      return next;
+    });
+  }
+  function deleteCut(i: number) {
+    setEditedCuts((prev) => prev.filter((_, idx) => idx !== i));
+  }
+  function resetEdits() {
+    setEditedHook(pkg.hookLine);
+    setEditedCuts(pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec, reason: c.reason })));
+  }
+
   const onRender = async () => {
-    if (!sourceFile || pkg.cutMarkers.length === 0) return;
+    if (!sourceFile || editedCuts.length === 0) return;
     setRenderState("rendering"); setRenderPct(0); setRenderError(null); setRenderPhase("render");
     try {
       const kit = getBrandKit();
@@ -382,17 +453,19 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
         : kit.logoDataUrl
           ? { kind: "image" as const, url: kit.logoDataUrl }
           : undefined;
-      const rawSegments = pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec }));
+      const rawSegments = editedCuts.map((c) => ({ startSec: c.startSec, endSec: c.endSec }));
       const { adjusted: segments, snapsApplied } = snapSegmentsToBeats(rawSegments, musicBPM, 0.4);
       void snapsApplied; // surfaced via UI badge; reserved for future logging
       const { blob, mimeType } = await renderReel({
         source: sourceFile,
         segments,
         outputAspect,
-        hookLine: pkg.hookLine,
+        hookLine: editedHook,
         hookPosition: hookPos,
         hookBackground: hookBg,
         hookBackgroundColor: kit.primaryColor,
+        // Typewriter for YT setup-arc pacing; word-stagger for IG/FB fast scrolls.
+        hookStyle: pkg.platform === "youtube_short" ? "typewriter" : "stagger",
         platform: pkg.platform,
         logo,
         musicFile: musicFile || undefined,
@@ -437,7 +510,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
           <div className="flex-1">
             <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render &amp; download this reel</div>
             <div className="mt-1 font-display text-lg tracking-tight text-text">
-              {pkg.cutMarkers.length} cut{pkg.cutMarkers.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM (beat-synced cuts)` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
+              {editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM (beat-synced cuts)` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
             </div>
             <p className="mt-1 text-xs text-muted">
               9:16 center-crop · multi-cut stitch · hook text burned in for 3s · audio + video fade out together over 1.5s · {includeOutro && (customLogo || getBrandKit().logoDataUrl) ? "animated logo outro at the end" : "no outro"} · WebM output (uploads to YT directly; IG/FB drop in CapCut → re-export as MP4)
@@ -491,24 +564,51 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
         {/* Left: cut + hook */}
         <div className="space-y-3">
           <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="text-[11px] uppercase tracking-widest text-gold/80">Cut for this platform</div>
-            {pkg.cutMarkers.map((c, i) => (
-              <div key={i} className="mt-2 flex items-baseline gap-2 font-mono text-sm">
-                <span className="text-gold">{fmtSec(c.startSec)}</span>
-                <span className="text-muted">→</span>
-                <span className="text-gold">{fmtSec(c.endSec)}</span>
-                <span className="text-xs text-muted">({Math.max(0, c.endSec - c.startSec).toFixed(0)}s)</span>
-              </div>
-            ))}
-            {cut?.reason && <p className="mt-2 text-sm text-muted">{cut.reason}</p>}
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] uppercase tracking-widest text-gold/80">Cuts for this platform</div>
+              <div className="text-[11px] text-muted">{editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"} · {editedCuts.reduce((acc, c) => acc + Math.max(0, c.endSec - c.startSec), 0).toFixed(0)}s total</div>
+            </div>
+            <div className="mt-2 space-y-2">
+              {editedCuts.map((c, i) => (
+                <div key={i} className="flex items-center gap-2 font-mono text-xs">
+                  <span className="w-5 text-muted">#{i + 1}</span>
+                  <button onClick={() => nudgeCut(i, "startSec", -0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move start earlier">−</button>
+                  <span className="w-12 text-center text-gold">{fmtSec(c.startSec)}</span>
+                  <button onClick={() => nudgeCut(i, "startSec", 0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move start later">+</button>
+                  <span className="text-muted">→</span>
+                  <button onClick={() => nudgeCut(i, "endSec", -0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move end earlier">−</button>
+                  <span className="w-12 text-center text-gold">{fmtSec(c.endSec)}</span>
+                  <button onClick={() => nudgeCut(i, "endSec", 0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move end later">+</button>
+                  <span className="text-[10px] text-muted">({Math.max(0, c.endSec - c.startSec).toFixed(1)}s)</span>
+                  {editedCuts.length > 1 && (
+                    <button onClick={() => deleteCut(i)} className="ml-auto text-[10px] text-muted hover:text-amber-400" title="Remove this cut">remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted">Nudge ±0.5s. The AI's reasoning: <span className="text-text/80">{editedCuts[0]?.reason || "—"}</span></p>
           </div>
 
           <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="text-[11px] uppercase tracking-widest text-gold/80">Hook (first 3s overlay)</div>
-            <div className="mt-2 font-display text-2xl leading-snug tracking-tight text-text">&ldquo;{pkg.hookLine}&rdquo;</div>
-            <button onClick={() => copy("hook", pkg.hookLine)} className="mt-3 inline-flex items-center gap-1 text-xs text-muted hover:text-text">
-              {copied === "hook" ? <><Check className="h-3 w-3 text-gold" /> Copied</> : "Copy hook"}
-            </button>
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] uppercase tracking-widest text-gold/80">Hook (first 3s overlay) — edit to taste</div>
+              {editedHook !== pkg.hookLine && (
+                <button onClick={resetEdits} className="text-[10px] text-muted hover:text-text">reset</button>
+              )}
+            </div>
+            <textarea
+              value={editedHook}
+              onChange={(e) => setEditedHook(e.target.value.slice(0, 80))}
+              rows={2}
+              className="mt-2 w-full resize-none rounded-md border border-border-strong bg-bg p-3 font-display text-xl leading-snug tracking-tight text-text outline-none focus:border-gold/60"
+              placeholder="Hook line..."
+            />
+            <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted">
+              <span>{editedHook.length}/80 chars · works without sound</span>
+              <button onClick={() => copy("hook", editedHook)} className="hover:text-text">
+                {copied === "hook" ? <><Check className="inline h-3 w-3 text-gold" /> Copied</> : "Copy hook"}
+              </button>
+            </div>
           </div>
 
           {pkg.title && (
