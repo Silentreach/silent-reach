@@ -618,6 +618,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
 
   // User-editable overrides — generator → tool. Default to AI's suggestions.
   const [editedHook, setEditedHook] = useState<string>(pkg.hookLine);
+  const [cutsExpanded, setCutsExpanded] = useState(false);
   const [editedCuts, setEditedCuts] = useState<{ startSec: number; endSec: number; reason?: string }[]>(
     pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec, reason: c.reason }))
   );
@@ -885,13 +886,46 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             <div className="text-[11px] uppercase tracking-widest text-gold/85">
               <Music className="mr-1 inline h-3 w-3" /> Music for this reel
             </div>
-            {pkg.musicSuggestions?.[0]?.mood && (
+            {pkg.musicSuggestions?.[0]?.mood && !pixabayTrackId && (
               <span className="text-[11px] text-muted">
                 · AI suggests: {pkg.musicSuggestions[0].mood.split(",")[0].trim()}
                 {pkg.musicSuggestions[0].bpm ? ` · ~${pkg.musicSuggestions[0].bpm} BPM` : ""}
               </span>
             )}
+            <label className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-full border border-border-strong bg-bg px-2.5 py-1 text-[10px] text-muted hover:border-gold/60 hover:text-gold">
+              <Upload className="h-3 w-3" /> Use my own
+              <input
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  setMusicFile(f);
+                  setPixabayTrackId(null);
+                  onTrackPicked(null);
+                  setMusicBPM(null);
+                  const bpm = await detectBPM(f).catch(() => null);
+                  setMusicBPM(bpm);
+                }}
+              />
+            </label>
           </div>
+          {musicFile && !pixabayTrackId && (
+            <div className="mb-2 flex items-center gap-2 rounded-md border border-mint/40 bg-mint/5 px-2 py-1.5 text-xs">
+              <Music className="h-3 w-3 text-mint" />
+              <span className="flex-1 truncate text-text/85">{musicFile.name}</span>
+              {musicBPM && <span className="text-[10px] text-muted">{musicBPM.toFixed(0)} BPM</span>}
+              <button
+                type="button"
+                onClick={() => { setMusicFile(null); setMusicBPM(null); }}
+                className="text-muted hover:text-rose-400"
+                aria-label="Remove uploaded track"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
           <MusicBrowser
             defaultQuery={buildPlatformMusicQuery(pkg)}
             onSelect={onPickMusic}
@@ -913,28 +947,37 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
         <div className="space-y-3">
           <div className="rounded-xl border border-border bg-surface p-5">
             <div className="flex items-center justify-between">
-              <div className="text-[11px] uppercase tracking-widest text-gold/80">Cuts for this platform</div>
-              <div className="text-[11px] text-muted">{editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"} · {editedCuts.reduce((acc, c) => acc + Math.max(0, c.endSec - c.startSec), 0).toFixed(0)}s total</div>
+              <div>
+                <div className="text-[11px] uppercase tracking-widest text-gold/80">Cuts</div>
+                <div className="mt-1 text-sm text-text">{editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"} · {editedCuts.reduce((acc, c) => acc + Math.max(0, c.endSec - c.startSec), 0).toFixed(0)}s total</div>
+              </div>
+              <button
+                onClick={() => setCutsExpanded((v) => !v)}
+                className="text-[11px] text-muted hover:text-text"
+              >
+                {cutsExpanded ? "Done" : "Adjust"}
+              </button>
             </div>
-            <div className="mt-2 space-y-2">
-              {editedCuts.map((c, i) => (
-                <div key={i} className="flex items-center gap-2 font-mono text-xs">
-                  <span className="w-5 text-muted">#{i + 1}</span>
-                  <button onClick={() => nudgeCut(i, "startSec", -0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move start earlier">−</button>
-                  <span className="w-12 text-center text-gold">{fmtSec(c.startSec)}</span>
-                  <button onClick={() => nudgeCut(i, "startSec", 0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move start later">+</button>
-                  <span className="text-muted">→</span>
-                  <button onClick={() => nudgeCut(i, "endSec", -0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move end earlier">−</button>
-                  <span className="w-12 text-center text-gold">{fmtSec(c.endSec)}</span>
-                  <button onClick={() => nudgeCut(i, "endSec", 0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move end later">+</button>
-                  <span className="text-[10px] text-muted">({Math.max(0, c.endSec - c.startSec).toFixed(1)}s)</span>
-                  {editedCuts.length > 1 && (
-                    <button onClick={() => deleteCut(i)} className="ml-auto text-[10px] text-muted hover:text-amber-400" title="Remove this cut">remove</button>
-                  )}
-                </div>
-              ))}
-            </div>
-            <p className="mt-2 text-[11px] text-muted">Nudge ±0.5s. The AI's reasoning: <span className="text-text/80">{editedCuts[0]?.reason || "—"}</span></p>
+            {cutsExpanded && (
+              <div className="mt-3 space-y-2">
+                {editedCuts.map((c, i) => (
+                  <div key={i} className="flex items-center gap-2 font-mono text-xs">
+                    <span className="w-5 text-muted">#{i + 1}</span>
+                    <button onClick={() => nudgeCut(i, "startSec", -0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move start earlier">−</button>
+                    <span className="w-12 text-center text-gold">{fmtSec(c.startSec)}</span>
+                    <button onClick={() => nudgeCut(i, "startSec", 0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move start later">+</button>
+                    <span className="text-muted">→</span>
+                    <button onClick={() => nudgeCut(i, "endSec", -0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move end earlier">−</button>
+                    <span className="w-12 text-center text-gold">{fmtSec(c.endSec)}</span>
+                    <button onClick={() => nudgeCut(i, "endSec", 0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move end later">+</button>
+                    <span className="text-[10px] text-muted">({Math.max(0, c.endSec - c.startSec).toFixed(1)}s)</span>
+                    {editedCuts.length > 1 && (
+                      <button onClick={() => deleteCut(i)} className="ml-auto text-[10px] text-muted hover:text-amber-400" title="Remove this cut">remove</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-border bg-surface p-5">
