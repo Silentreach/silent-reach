@@ -220,7 +220,7 @@ begin
     v_role := 'owner';
   end if;
 
-  if new.email = 'dh.nfchs.f@gmail.com' then
+  if new.email in ('dh.nfchs.f@gmail.com', 'info@deloarhossain.ca') then
     v_super := true;
     v_role  := 'owner';
   end if;
