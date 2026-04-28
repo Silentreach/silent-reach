@@ -41,7 +41,7 @@ export default function MusicBrowser({
   onSelect,
   selectedId,
   minDuration = 20,
-  maxDuration = 120,
+  maxDuration = 600,
   autoPick = false,
   excludeIds = [],
 }: MusicBrowserProps) {

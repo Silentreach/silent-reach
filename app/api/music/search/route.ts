@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") || "").trim().slice(0, 80);
   const minDuration = parseInt(searchParams.get("min_duration") || "30", 10);
-  const maxDuration = parseInt(searchParams.get("max_duration") || "120", 10);
+  const maxDuration = parseInt(searchParams.get("max_duration") || "600", 10);
 
   if (!q) {
     return NextResponse.json({ error: "Query is required" }, { status: 400 });

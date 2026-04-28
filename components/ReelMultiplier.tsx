@@ -920,7 +920,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             onSelect={onPickMusic}
             selectedId={pixabayTrackId}
             minDuration={20}
-            maxDuration={120}
+            maxDuration={600}
             autoPick={true}
             excludeIds={excludeMusicIds}
           />
