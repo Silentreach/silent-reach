@@ -120,21 +120,21 @@ function LoginForm() {
             </div>
 
             <div>
-              <label className="block text-sm text-neutral-300 mb-2">6-digit code</label>
+              <label className="block text-sm text-neutral-300 mb-2">Sign-in code</label>
               <input
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                maxLength={6}
+                maxLength={10}
                 required
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                placeholder="000000"
+                placeholder="00000000"
                 autoFocus
                 className="w-full px-4 py-4 bg-neutral-950 border border-neutral-800 rounded-lg text-white placeholder:text-neutral-700 focus:outline-none focus:border-emerald-500 transition text-center text-2xl font-mono tracking-[0.5em]"
               />
               <p className="text-xs text-neutral-500 mt-2 text-center">
-                Paste the 6-digit code from the email — or click the link in the email instead.
+                Paste the code from the email — or click the link in the email instead.
               </p>
             </div>
 
@@ -146,7 +146,7 @@ function LoginForm() {
 
             <button
               type="submit"
-              disabled={status === "verifying" || otp.length !== 6}
+              disabled={status === "verifying" || otp.length < 6}
               className="w-full px-4 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-neutral-800 disabled:text-neutral-500 text-black font-medium rounded-lg transition"
             >
               {status === "verifying" ? "Signing in…" : "Sign in"}
