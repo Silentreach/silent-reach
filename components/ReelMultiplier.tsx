@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { getBrandKit } from "@/lib/userContext";
 import { renderReel, downloadBlob } from "@/lib/videoRender";
+import { computeSubjectZone, inferTransition, type SubjectZone, type TransitionType } from "@/lib/frameAnalysis";
 import { transcodeWebMToMP4 } from "@/lib/transcoder";
 import { detectBPM, snapSegmentsToBeats } from "@/lib/audioAnalysis";
 import {
@@ -19,7 +20,7 @@ const FRAME_COUNT = 12; // 12 frames at 1080p quality gives the AI real context 
 const FRAME_MAX_W = 640; // smaller per-frame so we can afford 12 of them in one Haiku call
 const MOTION_SAMPLE_W = 96; // tiny resize for cheap pixel-diff motion calc
 
-interface ExtractedFrame { data: string; mediaType: "image/jpeg"; timestampSec: number; motionDelta: number; }
+interface ExtractedFrame { data: string; mediaType: "image/jpeg"; timestampSec: number; motionDelta: number; subjectZone?: SubjectZone; }
 
 /**
  * Extract N frames + compute motion delta between consecutive frames using a tiny
@@ -91,14 +92,45 @@ async function extractFramesFromFile(file: File): Promise<{ frames: ExtractedFra
     const maxDelta = Math.max(...rawDeltas, 1);
     const normalized = rawDeltas.map((d) => Math.round((d / maxDelta) * 100) / 100);
 
+    // Subject-zone analysis: where in each frame is the subject (probably).
+    // Used by the renderer to bias the 9:16 crop window so subjects don't
+    // get amputated at frame edges. Cheap (64px sub-canvas, runs in parallel).
+    const subjectZones = await Promise.all(
+      rawFrames.map(async (f) => computeSubjectZone(`data:image/jpeg;base64,${f.data}`)),
+    );
+
     const frames: ExtractedFrame[] = rawFrames.map((f, i) => ({
       data: f.data,
       mediaType: "image/jpeg",
       timestampSec: Math.round(f.timestampSec * 10) / 10,
       motionDelta: normalized[i],
+      subjectZone: subjectZones[i],
     }));
     return { frames, durationSec: duration };
   } finally { URL.revokeObjectURL(url); }
+}
+
+
+// Find the frame whose timestamp is closest to a target time (for crop-bias lookup).
+function pickClosestFrame(frames: ExtractedFrame[], targetSec: number): ExtractedFrame | undefined {
+  if (frames.length === 0) return undefined;
+  let best = frames[0];
+  let bestDelta = Math.abs(best.timestampSec - targetSec);
+  for (const f of frames) {
+    const d = Math.abs(f.timestampSec - targetSec);
+    if (d < bestDelta) { bestDelta = d; best = f; }
+  }
+  return best;
+}
+
+
+function stageLabel(stage: "decoding" | "analyzing" | "rendering" | "finalizing"): string {
+  switch (stage) {
+    case "decoding":   return "Decoding video";
+    case "analyzing":  return "Analyzing audio";
+    case "rendering":  return "Rendering frames";
+    case "finalizing": return "Finalizing";
+  }
 }
 
 export default function ReelMultiplier() {
@@ -116,6 +148,7 @@ export default function ReelMultiplier() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<ReelMultiplierOutput | null>(null);
+  const [extractedFrames, setExtractedFrames] = useState<ExtractedFrame[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onFile = (f: File | undefined) => {
@@ -142,6 +175,7 @@ export default function ReelMultiplier() {
     setError(null); setOutput(null); setStage("extracting");
     try {
       const { frames, durationSec } = await extractFramesFromFile(file);
+      setExtractedFrames(frames);
       setStage("thinking");
       const res = await fetch("/api/reel-multiplier", {
         method: "POST",
@@ -245,7 +279,7 @@ export default function ReelMultiplier() {
                     {analyzingBPM ? (
                       <><Loader2 className="h-3 w-3 animate-spin text-gold" /> Detecting BPM…</>
                     ) : musicBPM ? (
-                      <><span className="text-gold">♪ {musicBPM.toFixed(1)} BPM</span> · cuts will snap to beats (±0.4s tolerance)</>
+                      <><span className="text-gold">♪ {musicBPM.toFixed(1)} BPM</span> · cuts auto-snap to beats (±0.25s)</>
                     ) : (
                       <>BPM not detected — cuts will use AI markers as-is</>
                     )}
@@ -324,7 +358,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} />}
     </div>
   );
 }
@@ -346,7 +380,7 @@ const PLATFORM_META: Record<ReelPlatform, { label: string; icon: typeof Instagra
   facebook_reel:  { label: "Facebook Reel",  icon: Facebook,  color: "from-blue-500/30 to-sky-500/30" },
 };
 
-function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, musicBPM }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null }) {
+function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, musicBPM, extractedFrames }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null; extractedFrames: ExtractedFrame[] }) {
   const [active, setActive] = useState<ReelPlatform>(output.packages[0]?.platform || "instagram_reel");
   const pkg = output.packages.find((p) => p.platform === active) || output.packages[0];
 
@@ -375,7 +409,7 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, mus
         })}
       </div>
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} />}
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} />}
 
       {/* Music licensing footer */}
       <div className="rounded-2xl border border-border bg-bg-deep p-5">
@@ -397,7 +431,7 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, mus
   );
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicBPM }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicBPM, extractedFrames }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null; extractedFrames: ExtractedFrame[] }) {
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (label: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(null), 1500); } catch {}
@@ -410,6 +444,8 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
   const [renderState, setRenderState] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [renderPct, setRenderPct] = useState(0);
   const [renderPhase, setRenderPhase] = useState<"render" | "convert">("render");
+  const [renderStage, setRenderStage] = useState<"decoding" | "analyzing" | "rendering" | "finalizing">("decoding");
+  const [beatSnapsApplied, setBeatSnapsApplied] = useState<number>(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [hookPos, setHookPos] = useState<"auto" | "top" | "bottom">("auto");
   const [includeOutro, setIncludeOutro] = useState(true);
@@ -453,9 +489,25 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
         : kit.logoDataUrl
           ? { kind: "image" as const, url: kit.logoDataUrl }
           : undefined;
-      const rawSegments = editedCuts.map((c) => ({ startSec: c.startSec, endSec: c.endSec }));
-      const { adjusted: segments, snapsApplied } = snapSegmentsToBeats(rawSegments, musicBPM, 0.4);
-      void snapsApplied; // surfaced via UI badge; reserved for future logging
+      // Build segments with subject-aware crop bias + AI-inferred transitions.
+      // For each cut, find the closest extracted frame (by timestamp) and use
+      // its subjectZone to set cropBiasX/Y. inferTransition compares motion of
+      // adjacent cuts to pick whip / crossfade / dip per cut.
+      const rawSegments = editedCuts.map((c, i) => {
+        const midpoint = (c.startSec + c.endSec) / 2;
+        const closest = pickClosestFrame(extractedFrames, midpoint);
+        const prev = i > 0 ? pickClosestFrame(extractedFrames, (editedCuts[i - 1].startSec + editedCuts[i - 1].endSec) / 2) : undefined;
+        return {
+          startSec: c.startSec,
+          endSec: c.endSec,
+          cropBiasX: closest?.subjectZone?.confidence && closest.subjectZone.confidence > 0.3 ? closest.subjectZone.centerX : 0.5,
+          cropBiasY: closest?.subjectZone?.confidence && closest.subjectZone.confidence > 0.3 ? closest.subjectZone.centerY : 0.5,
+          transitionIn: i === 0 ? "dip" as const : inferTransition(prev?.motionDelta, closest?.motionDelta),
+        };
+      });
+      // Tighter beat snap (was 0.4, now 0.25 — only snap if VERY close to a beat).
+      const { adjusted: segments, snapsApplied } = snapSegmentsToBeats(rawSegments, musicBPM, 0.25);
+      setBeatSnapsApplied(snapsApplied);
       const { blob, mimeType } = await renderReel({
         source: sourceFile,
         segments,
@@ -473,6 +525,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
         includeOutro: includeOutro && !!logo,
         outroDurationSec: 2.0,
         fadeOutSec: 1.5,
+        onStage: (stage, p) => setRenderStage(stage),
         onProgress: (p) => setRenderPct(p),
       });
       const platformShort = pkg.platform === "instagram_reel" ? "ig" : pkg.platform === "youtube_short" ? "yt" : "fb";
@@ -510,7 +563,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
           <div className="flex-1">
             <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render &amp; download this reel</div>
             <div className="mt-1 font-display text-lg tracking-tight text-text">
-              {editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM (beat-synced cuts)` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
+              {editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM · ${beatSnapsApplied} cut${beatSnapsApplied === 1 ? "" : "s"} snapped to beat` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
             </div>
             <p className="mt-1 text-xs text-muted">
               9:16 center-crop · multi-cut stitch · hook text burned in for 3s · audio + video fade out together over 1.5s · {includeOutro && (customLogo || getBrandKit().logoDataUrl) ? "animated logo outro at the end" : "no outro"} · WebM output (uploads to YT directly; IG/FB drop in CapCut → re-export as MP4)
@@ -543,7 +596,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
             disabled={renderState === "rendering" || !sourceFile}
             className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60"
           >
-            {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> {renderPhase === "convert" ? "Converting" : "Rendering"} {(renderPct * 100).toFixed(0)}%</>}
+            {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> {renderPhase === "convert" ? "Converting" : stageLabel(renderStage)} {(renderPct * 100).toFixed(0)}%</>}
             {renderState === "done" && <><Check className="h-4 w-4" /> Downloaded</>}
             {renderState === "error" && <><Download className="h-4 w-4" /> Try again</>}
             {renderState === "idle" && <><Download className="h-4 w-4" /> Render &amp; download</>}

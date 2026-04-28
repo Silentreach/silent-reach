@@ -10,7 +10,16 @@
    - Music upload OR source audio, both routed through Web Audio
      so both can be cleanly faded */
 
-export interface Segment { startSec: number; endSec: number; }
+export interface Segment {
+  startSec: number;
+  endSec: number;
+  /** 0-1 horizontal subject center (where to bias the crop window). Default 0.5 = center. */
+  cropBiasX?: number;
+  /** 0-1 vertical subject center. Default 0.5. */
+  cropBiasY?: number;
+  /** Which transition to play when entering this segment. Default "dip". */
+  transitionIn?: "dip" | "whip" | "crossfade";
+}
 export type OutputAspect = "9:16" | "1:1" | "16:9";
 export type HookPosition = "top" | "bottom" | "auto";
 export type HookBackground = "none" | "pill" | "box";
@@ -39,6 +48,8 @@ export interface RenderOptions {
   includeOutro?: boolean;
   outroDurationSec?: number;          // default 2.0
   fadeOutSec?: number;                // default 1.5
+  /** Optional staged progress: stage label + 0-1 percent within the stage */
+  onStage?: (stage: "decoding" | "analyzing" | "rendering" | "finalizing", pct: number) => void;
   onProgress?: (pct: number) => void;
 }
 
@@ -77,6 +88,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
 
   /* Source video */
   const sourceUrl = URL.createObjectURL(source);
+  opts.onStage?.("decoding", 0);
   const video = document.createElement("video");
   video.src = sourceUrl;
   video.crossOrigin = "anonymous";
@@ -160,6 +172,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     "video/webm",
   ];
   const mimeType = candidates.find((m) => MediaRecorder.isTypeSupported(m)) || "video/webm";
+  opts.onStage?.("analyzing", 0);
   const recorder = new MediaRecorder(outputStream, {
     mimeType,
     videoBitsPerSecond: 9_000_000,
@@ -196,7 +209,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
       // Ken Burns: gradual zoom into center over each cut. Subtle (4%) so it
       // adds life on still moments without fighting camera motion in moving shots.
       const kenZoom = 1 - KEN_BURNS_AMOUNT * segProgress;
-      drawFrame(ctx, video, dims, kenZoom);
+      drawFrame(ctx, video, dims, kenZoom, seg.cropBiasX ?? 0.5, seg.cropBiasY ?? 0.5);
 
       // Cinematic intro fade-in: 0-0.6s starts dark and reveals the video.
       const INTRO_DUR = 0.6;
@@ -241,6 +254,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     if (onProgress) onProgress(Math.min(1, elapsedTotalSec / totalRenderDur));
     requestAnimationFrame(drawLoop);
   };
+  opts.onStage?.("rendering", 0);
   requestAnimationFrame(drawLoop);
 
   /* Schedule audio fadeout to align with the visual one. Music continues
@@ -292,6 +306,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
 
   phase = "stopped";
   if (musicNode) try { musicNode.stop(); } catch {}
+  opts.onStage?.("finalizing", 0);
   recorder.stop();
 
   await new Promise<void>((res) => { recorder.onstop = () => res(); });
@@ -302,20 +317,34 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
 
 /* ───────── Drawing helpers ───────── */
 
-function drawFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, dims: { w: number; h: number }, kenZoom: number = 1) {
+function drawFrame(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  dims: { w: number; h: number },
+  kenZoom: number = 1,
+  cropBiasX: number = 0.5,
+  cropBiasY: number = 0.5,
+) {
   const sw = video.videoWidth || 1920;
   const sh = video.videoHeight || 1080;
   const sourceAspect = sw / sh;
   const targetAspect = dims.w / dims.h;
   let sx = 0, sy = 0, scw = sw, sch = sh;
+
   if (sourceAspect > targetAspect) {
+    // Source is wider than target (e.g. 16:9 → 9:16) — crop horizontally.
     scw = sh * targetAspect;
-    sx = (sw - scw) / 2;
+    // Position the crop window biased toward the subject's X center.
+    const maxOffsetX = sw - scw;
+    sx = Math.max(0, Math.min(maxOffsetX, cropBiasX * sw - scw / 2));
   } else if (sourceAspect < targetAspect) {
+    // Source is taller — crop vertically.
     sch = sw / targetAspect;
-    sy = (sh - sch) / 2;
+    const maxOffsetY = sh - sch;
+    sy = Math.max(0, Math.min(maxOffsetY, cropBiasY * sh - sch / 2));
   }
-  // Ken Burns: shrink the source crop window toward its center for a slow zoom-in.
+
+  // Ken Burns slow zoom into center of CURRENT crop window.
   if (kenZoom !== 1) {
     const adjW = scw * kenZoom;
     const adjH = sch * kenZoom;
@@ -324,7 +353,35 @@ function drawFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, dims:
     scw = adjW;
     sch = adjH;
   }
+
+  // Cinematic color grade — applied as canvas filter (single GPU pass on most browsers).
+  // saturate(108%): subtle pop. contrast(105%): gentle S-curve approximation.
+  // brightness(101%): tiny lift. These are conservative — pro reels stay subtle.
+  ctx.filter = "saturate(108%) contrast(105%) brightness(101%)";
   ctx.drawImage(video, sx, sy, scw, sch, 0, 0, dims.w, dims.h);
+  ctx.filter = "none";
+
+  // Radial vignette: cinematic darkening at the corners. Anchored to dims center.
+  drawVignette(ctx, dims);
+}
+
+/* Cached vignette gradient — built once per dims. Drawing the gradient
+   each frame is cheap; computing it isn't. */
+let _vignetteCache: { w: number; h: number; grad: CanvasGradient | null } | null = null;
+function drawVignette(ctx: CanvasRenderingContext2D, dims: { w: number; h: number }) {
+  if (!_vignetteCache || _vignetteCache.w !== dims.w || _vignetteCache.h !== dims.h) {
+    const cx = dims.w / 2;
+    const cy = dims.h / 2;
+    const r = Math.hypot(cx, cy);
+    const grad = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(1, "rgba(0,0,0,0.32)");
+    _vignetteCache = { w: dims.w, h: dims.h, grad };
+  }
+  if (_vignetteCache.grad) {
+    ctx.fillStyle = _vignetteCache.grad;
+    ctx.fillRect(0, 0, dims.w, dims.h);
+  }
 }
 
 /* Motion hook overlay — word-by-word stagger reveal:
