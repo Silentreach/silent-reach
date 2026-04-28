@@ -1,7 +1,17 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import Logo from "@/components/Logo";
 
 export default function Footer() {
+  const pathname = usePathname();
+
+  // Hide on chromeless auth routes (login, magic-link callback, etc.)
+  if (pathname.startsWith("/login") || pathname.startsWith("/auth/")) {
+    return null;
+  }
+
   return (
     <footer className="border-t border-border/60 bg-bg-deep">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-[1.5fr_1fr_1fr_1fr]">

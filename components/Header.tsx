@@ -25,6 +25,12 @@ const NAV: NavItem[] = [
 
 export default function Header() {
   const pathname = usePathname();
+
+  // Hide nav on chromeless auth routes (login, magic-link callback, etc.)
+  if (pathname.startsWith("/login") || pathname.startsWith("/auth/")) {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-bg/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5">
