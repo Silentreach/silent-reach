@@ -5,9 +5,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 
-// Bootstrap: this email can sign in WITHOUT an invite code (first super_admin).
-// The DB trigger handle_new_auth_user also marks this email as is_super_admin.
-const SUPER_ADMIN_EMAIL = "dh.nfchs.f@gmail.com";
+// Bootstrap: these emails can sign in WITHOUT an invite code (super_admins).
+// The DB trigger handle_new_auth_user also marks these emails as is_super_admin.
+const SUPER_ADMIN_EMAILS = new Set([
+  "dh.nfchs.f@gmail.com",
+  "info@deloarhossain.ca",
+]);
 
 export async function POST(request: NextRequest) {
   const { email, code } = await request.json();
@@ -15,20 +18,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
   const admin = createServiceClient();
 
   // Does this email already have an account?
   const { data: existingUser } = await admin
     .from("users")
     .select("id, org_id")
-    .eq("email", email)
+    .eq("email", normalizedEmail)
     .maybeSingle();
 
   let userMetadata: Record<string, unknown> = {};
-  const isSuperAdminBootstrap = !existingUser && email === SUPER_ADMIN_EMAIL;
+  const isSuperAdminBootstrap = !existingUser && SUPER_ADMIN_EMAILS.has(normalizedEmail);
 
   if (!existingUser && !isSuperAdminBootstrap) {
-    // First sign-in — must redeem an invite code.
+    // First sign-in for a non-super-admin — must redeem an invite code.
     if (!code) {
       return NextResponse.json(
         { error: "Mintflow is invite-only. Please paste the invite code you received." },
@@ -51,7 +55,7 @@ export async function POST(request: NextRequest) {
     if (new Date(invite.expires_at) < new Date()) {
       return NextResponse.json({ error: "This invite code has expired." }, { status: 403 });
     }
-    if (invite.intended_email && invite.intended_email !== email) {
+    if (invite.intended_email && invite.intended_email !== normalizedEmail) {
       return NextResponse.json(
         { error: "This invite is for a different email address." },
         { status: 403 }
@@ -67,7 +71,7 @@ export async function POST(request: NextRequest) {
   // Trigger magic link via Supabase Auth.
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   const { error: linkError } = await admin.auth.signInWithOtp({
-    email,
+    email: normalizedEmail,
     options: {
       emailRedirectTo: `${siteUrl}/auth/callback`,
       data: userMetadata,
