@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { getBrandKit } from "@/lib/userContext";
 import { renderReel, downloadBlob } from "@/lib/videoRender";
 import { computeSubjectZone, inferTransition, type SubjectZone, type TransitionType } from "@/lib/frameAnalysis";
+import MusicBrowser, { type PixabayTrack } from "@/components/MusicBrowser";
 import { transcodeWebMToMP4 } from "@/lib/transcoder";
 import { detectBPM, snapSegmentsToBeats } from "@/lib/audioAnalysis";
 import {
@@ -178,6 +179,7 @@ export default function ReelMultiplier() {
   const [series, setSeries] = useState<string>("");
   const [stage, setStage] = useState<"idle" | "extracting" | "thinking" | "done" | "error">("idle");
   const [musicFile, setMusicFile] = useState<File | null>(null);
+  const [pixabayTrackId, setPixabayTrackId] = useState<number | null>(null);
   const [musicBPM, setMusicBPM] = useState<number | null>(null);
   const [analyzingBPM, setAnalyzingBPM] = useState(false);
   const [customLogo, setCustomLogo] = useState<{kind: "image" | "video"; url: string} | null>(null);
@@ -395,7 +397,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} onPickMusic={(track, blob) => { const f = new File([blob], `pixabay_${track.id}.mp3`, { type: "audio/mpeg" }); setMusicFile(f); setPixabayTrackId(track.id); detectBPM(f).then((bpm) => setMusicBPM(bpm)); }} pixabayTrackId={pixabayTrackId} />}
     </div>
   );
 }
@@ -417,7 +419,7 @@ const PLATFORM_META: Record<ReelPlatform, { label: string; icon: typeof Instagra
   facebook_reel:  { label: "Facebook Reel",  icon: Facebook,  color: "from-blue-500/30 to-sky-500/30" },
 };
 
-function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, musicBPM, extractedFrames }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null; extractedFrames: ExtractedFrame[] }) {
+function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, musicBPM, extractedFrames, onPickMusic, pixabayTrackId }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null; extractedFrames: ExtractedFrame[]; onPickMusic: (track: PixabayTrack, blob: Blob) => void; pixabayTrackId: number | null }) {
   const [active, setActive] = useState<ReelPlatform>(output.packages[0]?.platform || "instagram_reel");
   const pkg = output.packages.find((p) => p.platform === active) || output.packages[0];
 
@@ -446,7 +448,7 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, mus
         })}
       </div>
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} />}
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} onPickMusic={onPickMusic} pixabayTrackId={pixabayTrackId} />}
 
       {/* Music licensing footer */}
       <div className="rounded-2xl border border-border bg-bg-deep p-5">
@@ -468,7 +470,7 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, mus
   );
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicBPM, extractedFrames }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null; extractedFrames: ExtractedFrame[] }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicBPM, extractedFrames, onPickMusic, pixabayTrackId }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null; extractedFrames: ExtractedFrame[]; onPickMusic: (track: PixabayTrack, blob: Blob) => void; pixabayTrackId: number | null }) {
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (label: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(null), 1500); } catch {}
@@ -899,6 +901,20 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
               </li>
             ))}
           </ul>
+
+          {/* Pixabay music browser — pick a track in-app, no leaving Mintflow. */}
+          <div className="mt-4 rounded-lg border border-mint/40 bg-mint/5 p-3">
+            <div className="text-[11px] uppercase tracking-widest text-mint/85 mb-2">
+              <Music className="mr-1 inline h-3 w-3" /> Or pick a track right here (royalty-free)
+            </div>
+            <MusicBrowser
+              defaultQuery={pkg.musicSuggestions?.[0]?.searchQuery || pkg.musicSuggestions?.[0]?.mood || ""}
+              onSelect={onPickMusic}
+              selectedId={pixabayTrackId}
+              minDuration={20}
+              maxDuration={120}
+            />
+          </div>
         </div>
 
         <div className="space-y-3">
