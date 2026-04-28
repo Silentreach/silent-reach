@@ -5,6 +5,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 
+// Bootstrap: this email can sign in WITHOUT an invite code (first super_admin).
+// The DB trigger handle_new_auth_user also marks this email as is_super_admin.
+const SUPER_ADMIN_EMAIL = "dh.nfchs.f@gmail.com";
+
 export async function POST(request: NextRequest) {
   const { email, code } = await request.json();
   if (!email || typeof email !== "string") {
@@ -21,8 +25,9 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   let userMetadata: Record<string, unknown> = {};
+  const isSuperAdminBootstrap = !existingUser && email === SUPER_ADMIN_EMAIL;
 
-  if (!existingUser) {
+  if (!existingUser && !isSuperAdminBootstrap) {
     // First sign-in — must redeem an invite code.
     if (!code) {
       return NextResponse.json(
@@ -71,11 +76,12 @@ export async function POST(request: NextRequest) {
   });
 
   if (linkError) {
+    console.error("[request-magic-link] signInWithOtp failed:", linkError);
     return NextResponse.json({ error: linkError.message }, { status: 500 });
   }
 
   // Mark invite redeemed (will be linked to user_id via trigger after they verify)
-  if (!existingUser && code) {
+  if (!existingUser && code && !isSuperAdminBootstrap) {
     await admin
       .from("invite_codes")
       .update({ redeemed_at: new Date().toISOString() })
