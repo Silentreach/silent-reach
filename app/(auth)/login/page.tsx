@@ -1,32 +1,55 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useRouter, useSearchParams } from "next/navigation";
 
 function LoginForm() {
+  const router = useRouter();
   const sp = useSearchParams();
   const redirect = sp.get("redirect") || "/";
   const inviteCode = sp.get("code") || "";
 
+  const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState(inviteCode);
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [otp, setOtp] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "verifying" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function sendLink(e: React.FormEvent) {
     e.preventDefault();
     setStatus("sending");
     setError(null);
     try {
-      const validate = await fetch("/api/auth/request-magic-link", {
+      const r = await fetch("/api/auth/request-magic-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim() }),
       });
-      const result = await validate.json();
-      if (!validate.ok) throw new Error(result.error || "Could not send magic link");
-      setStatus("sent");
+      const result = await r.json();
+      if (!r.ok) throw new Error(result.error || "Could not send code");
+      setStep("code");
+      setStatus("idle");
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Unknown error");
+    }
+  }
+
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus("verifying");
+    setError(null);
+    try {
+      const r = await fetch("/api/auth/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), token: otp.trim() }),
+      });
+      const result = await r.json();
+      if (!r.ok) throw new Error(result.error || "Invalid code");
+      // Hard navigation so middleware sees the new session cookie
+      window.location.href = redirect;
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -41,19 +64,8 @@ function LoginForm() {
       </div>
 
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-8 shadow-2xl">
-        {status === "sent" ? (
-          <div className="text-center py-6">
-            <div className="text-5xl mb-4">✉️</div>
-            <h2 className="text-xl font-medium text-white mb-2">Check your email</h2>
-            <p className="text-sm text-neutral-400">
-              We sent a magic link to <span className="text-white">{email}</span>. Click it to sign in.
-            </p>
-            <button onClick={() => setStatus("idle")} className="mt-6 text-sm text-neutral-500 hover:text-neutral-300">
-              Use a different email
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} className="space-y-4">
+        {step === "email" ? (
+          <form onSubmit={sendLink} className="space-y-4">
             <div>
               <label className="block text-sm text-neutral-300 mb-2">Email</label>
               <input
@@ -93,7 +105,59 @@ function LoginForm() {
               disabled={status === "sending" || !email}
               className="w-full px-4 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-neutral-800 disabled:text-neutral-500 text-black font-medium rounded-lg transition"
             >
-              {status === "sending" ? "Sending magic link…" : "Send magic link"}
+              {status === "sending" ? "Sending code…" : "Send sign-in code"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={verifyCode} className="space-y-4">
+            <div className="text-center mb-2">
+              <div className="text-3xl mb-3">📬</div>
+              <h2 className="text-lg font-medium text-white">Check your email</h2>
+              <p className="text-sm text-neutral-400 mt-1">
+                We sent a sign-in code to<br />
+                <span className="text-white">{email}</span>
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm text-neutral-300 mb-2">6-digit code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                required
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                placeholder="000000"
+                autoFocus
+                className="w-full px-4 py-4 bg-neutral-950 border border-neutral-800 rounded-lg text-white placeholder:text-neutral-700 focus:outline-none focus:border-emerald-500 transition text-center text-2xl font-mono tracking-[0.5em]"
+              />
+              <p className="text-xs text-neutral-500 mt-2 text-center">
+                Paste the 6-digit code from the email — or click the link in the email instead.
+              </p>
+            </div>
+
+            {error && (
+              <div className="text-sm text-rose-400 bg-rose-950/50 border border-rose-900 rounded-lg px-4 py-3">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={status === "verifying" || otp.length !== 6}
+              className="w-full px-4 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-neutral-800 disabled:text-neutral-500 text-black font-medium rounded-lg transition"
+            >
+              {status === "verifying" ? "Signing in…" : "Sign in"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setStep("email"); setOtp(""); setError(null); }}
+              className="w-full text-sm text-neutral-500 hover:text-neutral-300 transition"
+            >
+              ← Use a different email
             </button>
           </form>
         )}
@@ -101,7 +165,6 @@ function LoginForm() {
 
       <p className="text-xs text-neutral-600 text-center mt-6">
         By signing in you agree to use Mintflow responsibly during private beta.
-        {redirect !== "/" && <span className="block mt-1">You&apos;ll return to {redirect} after sign-in.</span>}
       </p>
     </div>
   );
