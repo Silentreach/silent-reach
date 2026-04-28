@@ -91,6 +91,97 @@ Embrace:
 - Listing data when present (year built, lot size in sq ft, sq ft of home)
 `;
 
+/* ───────── BC Construction Briefing (shared across all prompts) ─────────
+   Construction reels need to do something real-estate reels don't:
+   simultaneously sell the GC's craft to homeowners, recruit subs from other
+   GCs, and build trade respect. Cliche bro-construction-tok content kills
+   credibility with sub-trades. This briefing leans into the BC reality —
+   Step Code, seismic, heat pumps, garden suites, the actual permit grind. */
+
+export const BC_CONSTRUCTION_BRIEFING = `BC CONSTRUCTION NICHE — read as binding context:
+
+Audience reality (split, all watching the same reel):
+- (1) Future client homeowners — vetting whether you can handle THEIR project. They want craft + reliability + scale signals, not transformation theater.
+- (2) Other GCs and developers who'd refer or sub work to you. They smell BS instantly.
+- (3) Sub-trades you're trying to recruit (framers, finishers, electricians). They check whether your sites look run safely and whether you respect their craft.
+- (4) Project owners on bigger jobs (developers, multi-unit clients) who pick GCs based on social proof.
+A single reel needs to land for all four. The way to do it: show actual work, with actual people, called by their actual trade.
+
+Project types that make BC construction reels work (in rough share-rate order):
+- Custom homes ($1M-$4M Greater Victoria, $3M+ West Vancouver) — the marquee content
+- Full house renovations ($200K-$600K) — most common Victoria homeowner project
+- Garden suites / laneway / detached secondary suites (Bill 44 zoning liberalization, 2023 — boom market)
+- Kitchen renos ($60K-$150K) and bathrooms ($25K-$80K) — bread-and-butter
+- ADU / coach house additions
+- Heritage restorations (Victoria has 800+ designated — complex permits, niche pride)
+- Step Code retrofits (energy upgrades driven by 2024 BCBC update)
+- Heat pump installs (federal + BC rebates active, 2030 gas furnace deadline)
+- Commercial tenant improvement (smaller share but high-value)
+
+BC-specific technical context (use accurately, not as buzzwords):
+- BC Building Code 2024 (BCBC) — current edition, references Step Code 1-5 (Step 5 ≈ passive house level)
+- WorkSafeBC governs site safety. COR-certified GCs win bigger contracts.
+- Seismic matters: Vancouver Island sits on Cascadia subduction zone — newer builds use shear walls, hold-downs, post-disaster construction. ICF (insulated concrete form) more common here than ON/AB.
+- Permit reality: building permit + development permit (separate) + plumbing/electrical/gas inspections. Some districts (Saanich, Victoria) take 3-6 months for permits — say so honestly when relevant.
+- Trades by name: framers, drywallers, mudders/tapers, finishers, electricians (red seal), plumbers, HVAC, roofers, glaziers, masons.
+- Material specifics that signal craft: FSC-certified Western Red Cedar (local), 2x6 framing (BC standard for exterior walls — 2x4 is rare here), Hardie board, ICF foundations, mineral wool insulation (vs fibreglass), heat-pump-ready electrical loads.
+
+Voice that wins (read this carefully — wrong voice = trade-respect failure):
+- Craft pride, never construction-tok bro voice. NEVER "let's get it" / "watch this transformation" / "absolute unit" / drum-rolls before reveals.
+- Safety-first by default: PPE visible in every shot with people, no harness-less moments at height, no chainsaw shots without ear pro.
+- Honest about reality: "we lost 3 days to atmospheric river rain" lands better than perfection theater. "Permits took 4 months — here's what we did with the wait" wins.
+- Trade respect: NEVER say "I built this" if subs were involved. Always "we built this" or name the lead carpenter / framer / electrician.
+- Numbers & scale: "this beam spans 28 feet without support" beats "huge open concept". "R-30 walls, R-50 attic" beats "energy efficient".
+- Time scale honesty: "3 weeks compressed to 18 seconds" beats "lightning-fast build".
+
+Specific cliches to avoid (instant-tell bro construction-tok):
+- "Watch this transformation" + bouncy track + before/after with mismatched lighting
+- Drone of empty dirt lot as opener (everyone uses it, nobody watches past 2s)
+- Hard-hat selfie with no work happening behind
+- "Built this from scratch" or "I designed and built" when subs did the framing/electrical/plumbing
+- Stock-music drum drops on the reveal
+- Generic "before & after" without naming WHAT was done structurally
+- Romanticizing unsafe shots (no harness at height, no PPE, slip hazards visible)
+
+Embrace (stuff that builds trade respect AND wins clients):
+- Show subs by craft. Name the lead carpenter. Mention the framing crew.
+- One specific tactile moment: hand caulking the tub/wall joint, level on a header, fresh drywall mud being knifed flat, miter saw cutting trim.
+- Scale anchors — a person beside the 12' island, a worker on a 24' beam.
+- Real material names called out: "2x6 with Roxul mineral wool", "ICF foundation", "Hardie board with rainscreen".
+- The completion moment with intentional lighting — homeowner walking in at golden hour, finished kitchen with the under-cabinet lights on.
+- Site sound design: framing nailgun thwock, miter saw cut, drywall mud being applied, the specific echo of an empty new-build space.
+- Permit + code wins: "Step 4 certified", "post-disaster construction", "passed final inspection on first walk-through".
+- The atmosphere: morning fog over a framed-but-not-sheathed second floor, end-of-day sunlight on raw cedar siding.
+
+Local details that move the needle:
+- Neighborhoods: Oak Bay (heritage rules tight), Fairfield (heritage + tight lots), James Bay (heritage), Saanich (most renos), Sidney (custom builds), Cordova Bay (custom waterfront), Esquimalt (recent rezoning for density), Langford (new builds).
+- Trade community: VRCA (Vancouver Regional Construction Association), GVHBA (Greater Victoria Home Builders Association), CHBA-BC. CHBA SAM Awards = local prestige.
+- Timing context: BC weather windows — exterior siding/roofing best Apr-Oct, interior work year-round, foundations risky Nov-Mar without heated tents.
+`;
+
+/* Pick the right briefing based on contentType. Pre-shoot uses long form
+   ContentType ("listing_tour" / "renovation_walkthrough" / "before_after" /
+   "contractor_feature" / "explainer"). Reel Multiplier uses ReelContentType
+   ("real_estate" / "construction" / "general"). This helper accepts either
+   form and returns the matching briefing or empty. */
+
+export function getNicheBriefing(contentType?: string): string {
+  if (!contentType) return "";
+  const t = contentType.toLowerCase();
+  if (t === "listing_tour" || t === "real_estate") return BC_REAL_ESTATE_BRIEFING;
+  if (
+    t === "renovation_walkthrough" ||
+    t === "before_after" ||
+    t === "contractor_feature" ||
+    t === "construction"
+  ) return BC_CONSTRUCTION_BRIEFING;
+  return ""; // explainer / general → no niche briefing
+}
+
+
+
+
+
 
 
 
@@ -101,7 +192,7 @@ export function buildPreShootPrompt(input: PreShootInput, ctx?: UserContext): {
 } {
   const system = `You are a senior short-form video strategist for Silent Story (premium real estate + renovation video, Victoria BC). Your output decides whether a reel hits 5K views or 50K. Treat it that way.
 
-${BC_REAL_ESTATE_BRIEFING}
+${getNicheBriefing(input.contentType)}
 
 Audience: scrolling, not following you, gives 1.5s. Drop-off cliffs at 3s, 8s, 15s, 30s — every shot serves the next cliff.
 Voice: editorial, quiet-luxury, never salesy. Never "stunning" / "elevated" / "you won\u2019t believe."
@@ -194,16 +285,39 @@ Rules for the shot list:
   return { system, user };
 }
 
+
+/* Infer niche from a YouTube video's title / description / tags. Used by
+   the Pack generator when the user hasn't explicitly picked a niche. Looks
+   for construction/real-estate signals — falls back to "" (no briefing). */
+function inferNicheFromMeta(meta: VideoMeta): string {
+  const blob = `${meta.title} ${meta.description} ${meta.tags.join(" ")}`.toLowerCase();
+  const constructionSignals = [
+    "renovation", "renovate", "construction", "build", "framing",
+    "drywall", "kitchen reno", "bathroom reno", "custom home",
+    "laneway", "garden suite", "addu", "adu", "general contractor",
+    "step code", "passive house", "permit", "carpenter", "framer",
+    "before and after", "before / after",
+  ];
+  const realEstateSignals = [
+    "listing", "for sale", "open house", "real estate", "realtor",
+    "mls", "vreb", "tour", "property", "home for sale",
+  ];
+  if (constructionSignals.some((s) => blob.includes(s))) return "construction";
+  if (realEstateSignals.some((s) => blob.includes(s))) return "real_estate";
+  return "";
+}
+
 export function buildPostUploadPrompt(
   meta: VideoMeta,
   transcript: string,
-  overrides: { audience?: string; location?: string; visualContext?: string }
+  overrides: { audience?: string; location?: string; visualContext?: string; niche?: string }
 , ctx?: UserContext): { system: string; user: string } {
   const hasTranscript = transcript.trim().length > 50;
+  const niche = overrides.niche || inferNicheFromMeta(meta);
 
   const system = `You are a senior post-production content strategist working for Silent Story, a real estate and renovation video production business in Victoria, British Columbia, Canada. A YouTube video has just been uploaded. Your job is to generate a full content pack that maximizes non-follower reach across Instagram, YouTube, LinkedIn, and Facebook.
 
-${BC_REAL_ESTATE_BRIEFING}
+${getNicheBriefing(niche)}
 
 IMPORTANT: Silent Story produces cinematic real estate reels, listing films, and developer features. Most videos have NO spoken narration — they are visual, music-driven pieces. Your captions and copy must be written FROM THE VISUAL STORY, not from dialogue. You will see the video's thumbnail as an attached image — use it as your primary visual cue, along with the title, description, and any user-provided visual context.
 
@@ -369,7 +483,7 @@ OUTPUT: strict JSON, exactly 3 packages in this order: instagram_reel, youtube_s
   const nicheBlock = ct === "real_estate"
     ? `\n${BC_REAL_ESTATE_BRIEFING}\n\nContent type: BC REAL ESTATE listing video.\nCut priorities for this niche (in this order): (1) the single moment that says "this house is different" — the architectural detail, light, or view that no listing photo captures, (2) the highest-information establishing shot (drone OR a deep interior wide that frames context), (3) the kitchen or primary living space at its most flattering moment, (4) one tight tactile detail (door hardware, stone, water reflection, fireplace lit). Skip generic walk-through chronology — every cut must EARN its second by carrying buying-trigger weight.`
     : ct === "construction"
-    ? `\nContent type: CONSTRUCTION progress / showcase video.\nWhat matters in this niche: scale-establishing wide shots, transformation moments (before/after, raw → finished), craftsmanship details (welding, framing, finishing), heavy machinery in action, drone overview of site, completion reveal. Audience values progress + craftsmanship + scale.`
+    ? `\n${BC_CONSTRUCTION_BRIEFING}\n\nContent type: BC CONSTRUCTION progress / craft showcase video.\nCut priorities for this niche (in this order): (1) the single moment of scale or craft that says "this is real work" — a 28-foot beam landing, a tight detail with hand in frame, the framing crew working a corner, (2) one transformation moment as a HARD CUT (not a slow dissolve) — raw framing → drywall, dirt → poured slab, demo → cleaned, (3) site or trade humanity — a worker concentrating on a saw cut, foreman checking a level, sub looking at finished work, (4) the completion moment with intentional lighting — homeowner walkthrough, finished kitchen with under-cabinet lights on, golden-hour cedar siding. Avoid: drone-of-empty-lot openers, hard-hat selfies with no work happening, "transformation" cuts with mismatched lighting.`
     : "";
 
   // Frame metadata table — shows the AI which frames have high vs low motion so it can
