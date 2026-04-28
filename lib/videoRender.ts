@@ -79,7 +79,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   if (segments.length === 0) throw new Error("No cut segments provided.");
   const dims = ASPECT_DIMS[outputAspect];
   const hookPos = resolveHookPosition(opts.hookPosition, opts.platform);
-  const fadeOutSec = opts.fadeOutSec ?? 1.5;
+  const fadeOutSec = opts.fadeOutSec ?? 0.4;
   const outroDurSec = opts.outroDurationSec ?? 2.0;
   const includeOutro = (opts.includeOutro ?? true) && !!opts.logo;
 
@@ -211,14 +211,9 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
       const kenZoom = 1 - KEN_BURNS_AMOUNT * segProgress;
       drawFrame(ctx, video, dims, kenZoom, seg.cropBiasX ?? 0.5, seg.cropBiasY ?? 0.5);
 
-      // Cinematic intro fade-in: 0-0.6s starts dark and reveals the video.
-      const INTRO_DUR = 0.6;
-      if (elapsedTotalSec < INTRO_DUR) {
-        const k = elapsedTotalSec / INTRO_DUR;
-        const darkness = 0.7 * (1 - k) * (1 - k);
-        ctx.fillStyle = `rgba(0,0,0,${darkness.toFixed(3)})`;
-        ctx.fillRect(0, 0, dims.w, dims.h);
-      }
+      // No intro fade-in — pro reels start ON the first frame of action.
+      // Pre-seek (line ~282) ensures the first recorded frame is the chosen
+      // start, so we can hit the ground running without a black flash.
 
       // Dip-to-black at cut boundaries (skip for the first cut's start and last cut's end).
       let transOpacity = 0;
@@ -260,14 +255,13 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   /* Schedule audio fadeout to align with the visual one. Music continues
      into the outro at a lower volume; source audio fades to 0 at end of main. */
   const t0 = audioCtx.currentTime;
+  // Music holds full volume through visuals + outro, fades only in the LAST 0.5s.
+  // Source audio (when no music uploaded) fades with the visual end of main.
+  const MUSIC_TAIL = 0.5;
   if (musicNode) {
     masterGain.gain.setValueAtTime(0.9, t0);
-    masterGain.gain.setValueAtTime(0.9, t0 + totalMainDur - fadeOutSec);
-    masterGain.gain.linearRampToValueAtTime(includeOutro ? 0.4 : 0, t0 + totalMainDur);
-    if (includeOutro) {
-      masterGain.gain.setValueAtTime(0.4, t0 + totalMainDur);
-      masterGain.gain.linearRampToValueAtTime(0, t0 + totalRenderDur - 0.1);
-    }
+    masterGain.gain.setValueAtTime(0.9, t0 + totalRenderDur - MUSIC_TAIL);
+    masterGain.gain.linearRampToValueAtTime(0, t0 + totalRenderDur - 0.05);
   } else if (mediaSourceNode) {
     masterGain.gain.setValueAtTime(0.9, t0);
     masterGain.gain.setValueAtTime(0.9, t0 + totalMainDur - fadeOutSec);

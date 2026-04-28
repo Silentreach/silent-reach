@@ -124,6 +124,43 @@ function pickClosestFrame(frames: ExtractedFrame[], targetSec: number): Extracte
 }
 
 
+
+
+// Capture a single high-quality JPEG from a video file at a given timestamp.
+// Used to produce a downloadable thumbnail companion alongside the rendered reel.
+async function captureThumbnailAt(file: File, timestampSec: number): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+  try {
+    const v = document.createElement("video");
+    v.src = url;
+    v.muted = true;
+    v.playsInline = true;
+    await new Promise<void>((resolve, reject) => {
+      v.onloadedmetadata = () => resolve();
+      v.onerror = () => reject(new Error("thumb decode failed"));
+    });
+    v.currentTime = Math.max(0, Math.min(v.duration - 0.05, timestampSec));
+    await new Promise<void>((resolve) => { v.onseeked = () => resolve(); });
+    // Square 1080x1080 — looks good as a feed thumbnail and works as YT custom thumbnail.
+    const c = document.createElement("canvas");
+    c.width = 1080;
+    c.height = 1080;
+    const ctx = c.getContext("2d")!;
+    const sw = v.videoWidth, sh = v.videoHeight;
+    const sourceAspect = sw / sh;
+    let sx = 0, sy = 0, scw = sw, sch = sh;
+    if (sourceAspect > 1) { scw = sh; sx = (sw - scw) / 2; }
+    else if (sourceAspect < 1) { sch = sw; sy = (sh - sch) / 2; }
+    ctx.filter = "saturate(108%) contrast(105%) brightness(101%)";
+    ctx.drawImage(v, sx, sy, scw, sch, 0, 0, 1080, 1080);
+    return await new Promise<Blob>((res, rej) =>
+      c.toBlob((b) => (b ? res(b) : rej(new Error("toBlob failed"))), "image/jpeg", 0.92)
+    );
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function stageLabel(stage: "decoding" | "analyzing" | "rendering" | "finalizing"): string {
   switch (stage) {
     case "decoding":   return "Decoding video";
@@ -310,8 +347,8 @@ export default function ReelMultiplier() {
                     onChange={(e) => {
                       const f = e.target.files?.[0]; if (!f) return;
                       const isVid = f.type.startsWith("video/");
-                      const cap = isVid ? 10 * 1024 * 1024 : 500 * 1024;
-                      if (f.size > cap) { alert(`Logo over ${isVid ? "10MB" : "500KB"} — please pick a smaller file. Got ${(f.size / (1024*1024)).toFixed(1)}MB.`); return; }
+                      const cap = isVid ? 30 * 1024 * 1024 : 2 * 1024 * 1024;
+                      if (f.size > cap) { alert(`Logo over ${isVid ? "30MB" : "2MB"} — please pick a smaller file. Got ${(f.size / (1024*1024)).toFixed(1)}MB.`); return; }
                       if (isVid) {
                         const url = URL.createObjectURL(f);
                         setCustomLogo({ kind: "video", url });
@@ -441,11 +478,17 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
   const cutLen = cut ? Math.max(0, cut.endSec - cut.startSec) : 0;
 
   // Render & Download state
-  const [renderState, setRenderState] = useState<"idle" | "rendering" | "done" | "error">("idle");
+  const [renderState, setRenderState] = useState<"idle" | "rendering" | "ready" | "error">("idle");
   const [renderPct, setRenderPct] = useState(0);
   const [renderPhase, setRenderPhase] = useState<"render" | "convert">("render");
   const [renderStage, setRenderStage] = useState<"decoding" | "analyzing" | "rendering" | "finalizing">("decoding");
   const [beatSnapsApplied, setBeatSnapsApplied] = useState<number>(0);
+  // Preview-before-download state
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewMime, setPreviewMime] = useState<string>("");
+  const [previewFilename, setPreviewFilename] = useState<string>("");
+  const [previewThumbUrl, setPreviewThumbUrl] = useState<string | null>(null);
+  const [previewThumbName, setPreviewThumbName] = useState<string>("");
   const [renderError, setRenderError] = useState<string | null>(null);
   const [hookPos, setHookPos] = useState<"auto" | "top" | "bottom">("auto");
   const [includeOutro, setIncludeOutro] = useState(true);
@@ -531,24 +574,43 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
       const platformShort = pkg.platform === "instagram_reel" ? "ig" : pkg.platform === "youtube_short" ? "yt" : "fb";
       const tag = (pkg.title || pkg.hookLine || "reel").slice(0, 32).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
 
-      // If MediaRecorder gave us native mp4 already (Safari sometimes), just download it.
+      // Hand off to preview state — user reviews before downloading.
+      let finalBlob = blob;
+      let finalExt = "webm";
       if (mimeType.includes("mp4")) {
-        downloadBlob(blob, `mintflow_${platformShort}_${tag}.mp4`);
+        finalExt = "mp4";
       } else {
-        // Browser-side transcode WebM -> MP4 via ffmpeg.wasm. Fall back to WebM if it fails.
+        // Best-effort transcode to MP4. Falls back to WebM on failure.
         setRenderPhase("convert");
         setRenderPct(0);
         try {
-          const mp4 = await transcodeWebMToMP4(blob, (pct) => setRenderPct(pct / 100));
-          downloadBlob(mp4, `mintflow_${platformShort}_${tag}.mp4`);
+          finalBlob = await transcodeWebMToMP4(blob, (pct) => setRenderPct(pct / 100));
+          finalExt = "mp4";
         } catch (transcodeErr) {
-          // ffmpeg.wasm failed (network, OOM, browser unsupported). Ship the WebM so the user isn't stuck.
-          console.warn("Transcode failed, falling back to WebM", transcodeErr);
-          downloadBlob(blob, `mintflow_${platformShort}_${tag}.webm`);
+          console.warn("Transcode failed, keeping WebM", transcodeErr);
         }
       }
-      setRenderState("done");
-      setTimeout(() => { setRenderState("idle"); setRenderPhase("render"); }, 2500);
+
+      // Free any previous preview URL before swapping.
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      const newUrl = URL.createObjectURL(finalBlob);
+      setPreviewUrl(newUrl);
+      setPreviewMime(finalBlob.type);
+      setPreviewFilename(`mintflow_${platformShort}_${tag}.${finalExt}`);
+
+      // AI thumbnail companion — capture first-listed thumbnail moment from source.
+      try {
+        if (sourceFile && pkg.thumbnailMoments?.[0]?.timestampSec != null) {
+          const thumbBlob = await captureThumbnailAt(sourceFile, pkg.thumbnailMoments[0].timestampSec);
+          if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
+          setPreviewThumbUrl(URL.createObjectURL(thumbBlob));
+          setPreviewThumbName(`mintflow_${platformShort}_${tag}_thumb.jpg`);
+        }
+      } catch (thumbErr) {
+        console.warn("Thumbnail capture failed (non-fatal)", thumbErr);
+      }
+
+      setRenderState("ready");
     } catch (err: unknown) {
       setRenderError(err instanceof Error ? err.message : "Couldn’t render the reel.");
       setRenderState("error");
@@ -561,7 +623,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
       <div className="rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/10 to-transparent p-5">
         <div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex-1">
-            <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render &amp; download this reel</div>
+            <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render preview · review before downloading</div>
             <div className="mt-1 font-display text-lg tracking-tight text-text">
               {editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM · ${beatSnapsApplied} cut${beatSnapsApplied === 1 ? "" : "s"} snapped to beat` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
             </div>
@@ -597,9 +659,9 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
             className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60"
           >
             {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> {renderPhase === "convert" ? "Converting" : stageLabel(renderStage)} {(renderPct * 100).toFixed(0)}%</>}
-            {renderState === "done" && <><Check className="h-4 w-4" /> Downloaded</>}
+            {renderState === "ready" && <><Check className="h-4 w-4" /> Preview ready</>}
             {renderState === "error" && <><Download className="h-4 w-4" /> Try again</>}
-            {renderState === "idle" && <><Download className="h-4 w-4" /> Render &amp; download</>}
+            {renderState === "idle" && <><Download className="h-4 w-4" /> Render preview</>}
           </button>
         </div>
         {renderState === "rendering" && (
@@ -611,6 +673,80 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
           <div className="mt-3 text-xs text-amber-300">{renderError}</div>
         )}
       </div>
+
+
+      {/* Preview-before-download — the cinematographer's review pass */}
+      {renderState === "ready" && previewUrl && (
+        <div className="rounded-2xl border border-mint/40 bg-mint/5 p-5">
+          <div className="text-[11px] uppercase tracking-widest text-mint/85 mb-3">
+            <Check className="mr-1 inline h-3 w-3" /> Preview · download when you&apos;re happy with it
+          </div>
+          <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
+            <div>
+              <video
+                src={previewUrl}
+                controls
+                playsInline
+                className="w-full max-w-[400px] mx-auto rounded-xl bg-black aspect-[9/16] object-contain border border-border/60"
+              />
+            </div>
+            <div className="space-y-3">
+              {previewThumbUrl && (
+                <div>
+                  <div className="text-xs text-muted mb-1.5">AI thumbnail</div>
+                  <img src={previewThumbUrl} alt="thumbnail" className="w-full max-w-[200px] rounded-lg border border-border/60" />
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    if (!previewUrl || !previewFilename) return;
+                    const a = document.createElement("a");
+                    a.href = previewUrl;
+                    a.download = previewFilename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:bg-gold-light"
+                >
+                  <Download className="h-4 w-4" /> Download reel
+                </button>
+                {previewThumbUrl && (
+                  <button
+                    onClick={() => {
+                      const a = document.createElement("a");
+                      a.href = previewThumbUrl;
+                      a.download = previewThumbName || "thumbnail.jpg";
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-border-strong bg-bg-deep/40 px-4 py-2 text-sm text-text hover:bg-bg-deep"
+                  >
+                    <Download className="h-4 w-4" /> Download thumbnail
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (previewUrl) URL.revokeObjectURL(previewUrl);
+                    if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
+                    setPreviewUrl(null);
+                    setPreviewThumbUrl(null);
+                    setRenderState("idle");
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-bg-deep/40 px-4 py-2 text-sm text-muted hover:text-text"
+                >
+                  Try a different cut → re-render
+                </button>
+              </div>
+              <p className="text-[11px] text-muted leading-relaxed mt-2">
+                Not happy with it? Nudge cuts/hook below and hit re-render. Or switch to a different platform tab and render that one too — keep the one you like.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cut + hook + caption row */}
       <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
