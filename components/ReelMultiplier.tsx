@@ -208,6 +208,162 @@ async function captureThumbnailAt(file: File, timestampSec: number): Promise<Blo
   }
 }
 
+
+// Designed thumbnail: frame at timestamp + bottom gradient + bold overlay text
+// + corner timestamp tag + (optional) brand wordmark. Output 1080x1920 JPEG.
+async function renderDesignedThumbnail(
+  file: File,
+  timestampSec: number,
+  overlayText: string,
+  brandName?: string,
+): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+  try {
+    const v = document.createElement("video");
+    v.src = url;
+    v.muted = true;
+    v.playsInline = true;
+    await new Promise<void>((resolve, reject) => {
+      v.onloadedmetadata = () => resolve();
+      v.onerror = () => reject(new Error("thumb decode failed"));
+    });
+    v.currentTime = Math.max(0, Math.min(v.duration - 0.05, timestampSec));
+    await new Promise<void>((resolve) => { v.onseeked = () => resolve(); });
+
+    const W = 1080, H = 1920;
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext("2d");
+    if (!ctx) throw new Error("canvas unavailable");
+
+    // 1. Draw source frame, 9:16 center-crop, color-graded.
+    const sw = v.videoWidth, sh = v.videoHeight;
+    const targetAspect = W / H;
+    const sourceAspect = sw / sh;
+    let sx = 0, sy = 0, scw = sw, sch = sh;
+    if (sourceAspect > targetAspect) {
+      scw = sh * targetAspect; sx = (sw - scw) / 2;
+    } else if (sourceAspect < targetAspect) {
+      sch = sw / targetAspect; sy = (sh - sch) / 2;
+    }
+    ctx.filter = "saturate(112%) contrast(106%) brightness(102%)";
+    ctx.drawImage(v, sx, sy, scw, sch, 0, 0, W, H);
+    ctx.filter = "none";
+
+    // 2. Bottom-third dark gradient for text legibility.
+    const grad = ctx.createLinearGradient(0, H * 0.55, 0, H);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(0.5, "rgba(0,0,0,0.55)");
+    grad.addColorStop(1, "rgba(0,0,0,0.92)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, H * 0.55, W, H * 0.45);
+
+    // 3. Subtle radial vignette for cinematic feel.
+    const cx = W / 2, cy = H / 2, r = Math.hypot(cx, cy);
+    const vGrad = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r);
+    vGrad.addColorStop(0, "rgba(0,0,0,0)");
+    vGrad.addColorStop(1, "rgba(0,0,0,0.30)");
+    ctx.fillStyle = vGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // 4. Overlay text — large, all-caps, generous letter-spacing, gold accent.
+    const text = (overlayText || "").trim().toUpperCase();
+    if (text) {
+      // Auto-wrap to two lines if very long.
+      const maxFontSize = 100;
+      const minFontSize = 56;
+      let fontSize = maxFontSize;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      // Pick font size that fits the width with margin.
+      const sidePad = 80;
+      const maxWidth = W - sidePad * 2;
+      const lines = wrapText(ctx, text, maxWidth, fontSize, "Georgia, 'Times New Roman', serif");
+      // If wrapped to >2 lines, shrink font.
+      const finalLines = lines.length > 2 ? wrapText(ctx, text, maxWidth, minFontSize, "Georgia, 'Times New Roman', serif") : lines;
+      fontSize = lines.length > 2 ? minFontSize : maxFontSize;
+      ctx.font = `700 ${fontSize}px Georgia, 'Times New Roman', serif`;
+      // Letter-spacing approximation via canvas: split into chars and offset (cheap).
+      ctx.fillStyle = "#F5EFE7";
+      ctx.shadowColor = "rgba(0,0,0,0.6)";
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
+      const lineHeight = fontSize * 1.1;
+      const totalH = finalLines.length * lineHeight;
+      let y = H - 130 - totalH + lineHeight;
+      for (const line of finalLines) {
+        ctx.fillText(line, sidePad, y);
+        y += lineHeight;
+      }
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+    }
+
+    // 5. Top-right small timestamp pill in gold.
+    const ts = `${Math.floor(timestampSec / 60)}:${String(Math.floor(timestampSec % 60)).padStart(2, "0")}`;
+    ctx.font = "600 26px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "rgba(212, 175, 55, 0.95)";
+    const padX = 22, padY = 12;
+    const tsMetrics = ctx.measureText(ts);
+    const pillW = tsMetrics.width + padX * 2;
+    const pillH = 26 + padY * 2;
+    const pillX = W - 60 - pillW;
+    const pillY = 60;
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    roundRect(ctx, pillX, pillY, pillW, pillH, 999);
+    ctx.fill();
+    ctx.fillStyle = "#D4AF37";
+    ctx.fillText(ts, W - 60 - padX, pillY + padY);
+
+    // 6. Brand wordmark — bottom-right, small.
+    if (brandName) {
+      ctx.font = "500 22px ui-sans-serif, system-ui, sans-serif";
+      ctx.fillStyle = "rgba(245, 239, 231, 0.8)";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(brandName, W - 60, H - 60);
+    }
+
+    return await new Promise<Blob>((res, rej) =>
+      c.toBlob((b) => (b ? res(b) : rej(new Error("toBlob failed"))), "image/jpeg", 0.92)
+    );
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, fontSize: number, fontFamily: string): string[] {
+  ctx.font = `700 ${fontSize}px ${fontFamily}`;
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+  for (const w of words) {
+    const test = current ? current + " " + w : w;
+    if (ctx.measureText(test).width > maxWidth && current) {
+      lines.push(current);
+      current = w;
+    } else {
+      current = test;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
 function stageLabel(stage: "decoding" | "analyzing" | "rendering" | "finalizing"): string {
   switch (stage) {
     case "decoding":   return "Decoding video";
@@ -892,7 +1048,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                 {pkg.musicSuggestions[0].bpm ? ` · ~${pkg.musicSuggestions[0].bpm} BPM` : ""}
               </span>
             )}
-            <label className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-full border border-border-strong bg-bg px-2.5 py-1 text-[10px] text-muted hover:border-gold/60 hover:text-gold">
+            <label className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-gold/50 bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold hover:bg-gold/20">
               <Upload className="h-3 w-3" /> Use my own
               <input
                 type="file"
@@ -1061,20 +1217,48 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {pkg.thumbnailMoments.map((m, i) => (
-            <a key={i} href={`/thumbnail-studio?headline=${encodeURIComponent(m.overlayText)}&subtitle=${encodeURIComponent(pkg.hookLine)}`}
-               className="group block">
+            <div key={i} className="group">
               <div className="relative aspect-[9/16] overflow-hidden rounded-lg border border-border-strong bg-bg-deep transition group-hover:border-gold/60">
                 <FrameAt sourceUrl={sourceUrl} timeSec={m.timestampSec} />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/60 to-transparent p-3">
-                  <div className="text-[10px] uppercase tracking-widest text-gold">{fmtSec(m.timestampSec)}</div>
-                  <div className="mt-0.5 font-display text-base leading-tight text-text">{m.overlayText}</div>
+                {/* Bottom gradient + AI overlay text — matches the downloadable design */}
+                <div className="absolute inset-x-0 top-0 p-3 flex justify-end">
+                  <span className="rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-semibold text-gold">{fmtSec(m.timestampSec)}</span>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-4 pb-5">
+                  <div className="font-display text-lg uppercase tracking-wider text-text leading-tight" style={{textShadow: "0 2px 8px rgba(0,0,0,0.6)"}}>{m.overlayText}</div>
                 </div>
               </div>
-              <div className="mt-1.5 text-xs text-muted">{m.reason}</div>
-              <div className="mt-1 inline-flex items-center gap-1 text-xs text-gold opacity-0 transition group-hover:opacity-100">
-                Customize in Studio <ArrowRight className="h-3 w-3" />
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <button
+                  onClick={async () => {
+                    if (!sourceFile) return;
+                    try {
+                      const blob = await renderDesignedThumbnail(sourceFile, m.timestampSec, m.overlayText, getBrandKit().name);
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `mintflow_thumb_${(m.overlayText || "frame").slice(0, 24).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.jpg`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      setTimeout(() => URL.revokeObjectURL(url), 5000);
+                    } catch (err) {
+                      alert(err instanceof Error ? err.message : "Couldn't render thumbnail");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full bg-gold px-3 py-1 text-xs font-medium text-black hover:bg-gold-light"
+                >
+                  <Download className="h-3 w-3" /> Download
+                </button>
+                <a
+                  href={`/thumbnail-studio?headline=${encodeURIComponent(m.overlayText)}&subtitle=${encodeURIComponent(pkg.hookLine)}`}
+                  className="text-[11px] text-muted hover:text-gold"
+                >
+                  Customize →
+                </a>
               </div>
-            </a>
+              <div className="mt-1 text-[11px] text-muted leading-snug">{m.reason}</div>
+            </div>
           ))}
         </div>
       </div>
