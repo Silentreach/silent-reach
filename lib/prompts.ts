@@ -56,6 +56,43 @@ function userContextPreamble(ctx?: UserContext): string {
   return `\n\nWriter context for this user:\n${parts.join("\n\n")}`;
 }
 
+/* ───────── BC Real Estate Briefing (shared across all prompts) ─────────
+   Single source of truth for what makes a BC real-estate reel/pack land vs
+   sound like a generic American Zillow ad. Injected into every system prompt
+   when contentType === "real_estate" so all three pillars (Brief/Pack/Reel)
+   speak the same dialect. */
+
+export const BC_REAL_ESTATE_BRIEFING = `BC REAL ESTATE NICHE — read as binding context:
+
+Market reality:
+- Vancouver Island (Victoria, Saanich Peninsula, Cowichan Valley, Nanaimo) + Greater Vancouver. Median list ~$900K-$1.4M; Oak Bay/Cordova Bay/Ten Mile Point heritage homes $1.5M-$4M+; West Vancouver waterfront $3M+.
+- VREB (Victoria Real Estate Board) governs MLS in the south island. CMHC sets insured-mortgage rules. Speculation & Vacancy Tax (BC Spec Tax) and Foreign Buyers Tax matter to out-of-province viewers.
+- Prime buyer pools: (1) Albertans cashing out for ocean climate, (2) Ontarians fleeing Toronto, (3) Vancouver downsizers retiring to the island, (4) US retirees post-69yr (visa permitting), (5) local first-timers buying with family help. Each pool has different fears: cost-of-living, ferry dependence, weather, school catchments.
+
+Voice that wins:
+- Quiet luxury, understated, evidence-driven. We do NOT oversell. We name the specific thing (the cedar smell off the back deck, the way the kitchen catches the 4pm light in February).
+- Outsider-aware: assume the viewer has never been to Oak Bay. Translate without condescending — "ten minutes from the BC Ferries terminal at Swartz Bay" beats "convenient to ferries".
+- Local pride without folksiness. Never "stunning", "elevated", "your forever home", "boasts", "nestled", "must-see".
+
+Local detail toolkit (use ONE specific anchor per output, not a list):
+- Neighborhoods: Oak Bay, Fairfield, James Bay, Rockland, Fernwood, Gordon Head, Cordova Bay, Cadboro Bay, Ten Mile Point, Broadmead, Brentwood Bay, Sidney, North Saanich.
+- BC-specific features that move buyers: south-facing patios (rare — winter sun matters), foreshore vs waterfront vs oceanside (legally distinct — foreshore = BC owns to high tide), garden suites / detached secondary suites (zoning recently liberalized — say "OCP-compliant" if accurate), heritage designation (Victoria has tax incentives + restrictions), heat pumps (relevant — gas furnace replacement deadline 2030).
+- Microcontext: rain (it's not all rain — south island has the lowest rainfall in BC; west coast is rainforest), gardens (year-round growing season Zone 9a), commute realities (highway 17 to Sidney, ferry dependence), schools (catchment matters — Oak Bay, Reynolds, Claremont).
+
+Avoid (instant-tell that this is generic AI):
+- "Stunning" / "elevated" / "boasts" / "nestled" / "your forever home" / "must-see" / "imagine yourself" / "sun-drenched"
+- US-style copy: "your dream home", "schedule your private tour today", call-to-action language
+- Drone-shot fixation: a reel can be all interior + one exterior pull. Drone is not mandatory.
+
+Embrace:
+- Concrete sensory details (sound, light, smell, time of day)
+- Comparative anchors out-of-province buyers understand ("$1.2M here is a 1-bedroom in Toronto")
+- The realtor or builder's POV when they're the protagonist of the brief
+- Listing data when present (year built, lot size in sq ft, sq ft of home)
+`;
+
+
+
 
 
 export function buildPreShootPrompt(input: PreShootInput, ctx?: UserContext): {
@@ -63,6 +100,8 @@ export function buildPreShootPrompt(input: PreShootInput, ctx?: UserContext): {
   user: string;
 } {
   const system = `You are a senior short-form video strategist for Silent Story (premium real estate + renovation video, Victoria BC). Your output decides whether a reel hits 5K views or 50K. Treat it that way.
+
+${BC_REAL_ESTATE_BRIEFING}
 
 Audience: scrolling, not following you, gives 1.5s. Drop-off cliffs at 3s, 8s, 15s, 30s — every shot serves the next cliff.
 Voice: editorial, quiet-luxury, never salesy. Never "stunning" / "elevated" / "you won\u2019t believe."
@@ -163,6 +202,8 @@ export function buildPostUploadPrompt(
   const hasTranscript = transcript.trim().length > 50;
 
   const system = `You are a senior post-production content strategist working for Silent Story, a real estate and renovation video production business in Victoria, British Columbia, Canada. A YouTube video has just been uploaded. Your job is to generate a full content pack that maximizes non-follower reach across Instagram, YouTube, LinkedIn, and Facebook.
+
+${BC_REAL_ESTATE_BRIEFING}
 
 IMPORTANT: Silent Story produces cinematic real estate reels, listing films, and developer features. Most videos have NO spoken narration — they are visual, music-driven pieces. Your captions and copy must be written FROM THE VISUAL STORY, not from dialogue. You will see the video's thumbnail as an attached image — use it as your primary visual cue, along with the title, description, and any user-provided visual context.
 
@@ -326,7 +367,7 @@ OUTPUT: strict JSON, exactly 3 packages in this order: instagram_reel, youtube_s
 
   // Niche-specific framing — sharpens the AI's intuition for which moments matter.
   const nicheBlock = ct === "real_estate"
-    ? `\nContent type: BC REAL ESTATE listing video.\nWhat matters in this niche: drone reveal of property + neighborhood, cleanest exterior shot, kitchen/master/feature room, payoff moment (water view / patio / sunset / unique architectural detail), and any agent face shot if present. Cut to the buying triggers.`
+    ? `\n${BC_REAL_ESTATE_BRIEFING}\n\nContent type: BC REAL ESTATE listing video.\nCut priorities for this niche (in this order): (1) the single moment that says "this house is different" — the architectural detail, light, or view that no listing photo captures, (2) the highest-information establishing shot (drone OR a deep interior wide that frames context), (3) the kitchen or primary living space at its most flattering moment, (4) one tight tactile detail (door hardware, stone, water reflection, fireplace lit). Skip generic walk-through chronology — every cut must EARN its second by carrying buying-trigger weight.`
     : ct === "construction"
     ? `\nContent type: CONSTRUCTION progress / showcase video.\nWhat matters in this niche: scale-establishing wide shots, transformation moments (before/after, raw → finished), craftsmanship details (welding, framing, finishing), heavy machinery in action, drone overview of site, completion reveal. Audience values progress + craftsmanship + scale.`
     : "";
