@@ -397,7 +397,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} onPickMusic={(track, blob) => { const f = new File([blob], `pixabay_${track.id}.mp3`, { type: "audio/mpeg" }); setMusicFile(f); setPixabayTrackId(track.id); detectBPM(f).then((bpm) => setMusicBPM(bpm)); }} pixabayTrackId={pixabayTrackId} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} onPickMusic={(track, blob) => { const f = new File([blob], `jamendo_${track.id}.mp3`, { type: "audio/mpeg" }); setMusicFile(f); setPixabayTrackId(track.id); detectBPM(f).then((bpm) => setMusicBPM(bpm)); }} pixabayTrackId={pixabayTrackId} />}
     </div>
   );
 }
