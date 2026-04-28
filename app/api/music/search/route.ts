@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
   url.searchParams.set("audioformat", "mp32");
   url.searchParams.set("ccnc", "false");      // exclude non-commercial
   url.searchParams.set("ccsa", "false");      // exclude share-alike (creates derivative-work issues)
+  url.searchParams.set("ccnd", "false");      // exclude no-derivatives (REELS ARE DERIVATIVE WORKS)
   url.searchParams.set("order", "popularity_total");
 
   let res: Response;
