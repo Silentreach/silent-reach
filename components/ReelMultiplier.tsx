@@ -451,13 +451,6 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="rounded-2xl border border-gold/30 bg-gold/5 p-5">
-        <div className="text-[11px] uppercase tracking-widest text-gold/80"><Sparkles className="mr-1 inline h-3 w-3" /> Three reels, ready to ship</div>
-        <h2 className="mt-1 font-display text-2xl tracking-tight text-text md:text-3xl">One upload. Three platform-native packages.</h2>
-        <p className="mt-2 text-sm text-muted">{output.globalNotes}</p>
-      </div>
-
       {/* Platform tabs */}
       <div className="flex flex-wrap gap-2">
         {output.packages.map((p) => {
@@ -557,22 +550,6 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
 
       {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} customLogo={customLogo} extractedFrames={extractedFrames} onPreviewReady={onPreviewReady} excludeMusicIds={usedIds.filter(id => id !== musicIdByPlatform[pkg.platform])} onTrackPicked={(id) => onTrackPicked(pkg.platform, id)} />}
 
-      {/* Music licensing footer */}
-      <div className="rounded-2xl border border-border bg-bg-deep p-5">
-        <div className="flex items-start gap-3">
-          <Music className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
-          <div className="flex-1">
-            <div className="text-[11px] uppercase tracking-widest text-gold/80">Music licensing — read once</div>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted">{output.musicLicensingNote}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <ExtLink href="https://www.epidemicsound.com/search/" label="Epidemic Sound search" />
-              <ExtLink href="https://artlist.io/songs" label="Artlist" />
-              <ExtLink href="https://studio.youtube.com/channel/UC/music" label="YouTube Audio Library" />
-              <ExtLink href="https://pixabay.com/music/" label="Pixabay Music (free)" />
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -776,12 +753,12 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
       <div className="rounded-2xl border border-gold/40 bg-gradient-to-br from-gold/10 to-transparent p-5">
         <div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex-1">
-            <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render preview · review before downloading</div>
+            <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render preview</div>
             <div className="mt-1 font-display text-lg tracking-tight text-text">
               {editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM · ${beatSnapsApplied} cut${beatSnapsApplied === 1 ? "" : "s"} snapped to beat` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
             </div>
             <p className="mt-1 text-xs text-muted">
-              9:16 center-crop · multi-cut stitch · hook text burned in for 3s · audio + video fade out together over 1.5s · {includeOutro && (customLogo || getBrandKit().logoDataUrl) ? "animated logo outro at the end" : "no outro"} · WebM output (uploads to YT directly; IG/FB drop in CapCut → re-export as MP4)
+
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
               <label className="flex items-center gap-1.5 text-muted">
@@ -962,7 +939,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
 
           <div className="rounded-xl border border-border bg-surface p-5">
             <div className="flex items-center justify-between">
-              <div className="text-[11px] uppercase tracking-widest text-gold/80">Hook (first 3s overlay) — edit to taste</div>
+              <div className="text-[11px] uppercase tracking-widest text-gold/80">Hook (first 3s overlay)</div>
               {editedHook !== pkg.hookLine && (
                 <button onClick={resetEdits} className="text-[10px] text-muted hover:text-text">reset</button>
               )}
@@ -975,7 +952,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
               placeholder="Hook line..."
             />
             <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted">
-              <span>{editedHook.length}/80 chars · works without sound</span>
+              <span></span>
               <button onClick={() => copy("hook", editedHook)} className="hover:text-text">
                 {copied === "hook" ? <><Check className="inline h-3 w-3 text-gold" /> Copied</> : "Copy hook"}
               </button>
@@ -1036,8 +1013,8 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
       {/* Thumbnails */}
       <div className="rounded-xl border border-border bg-surface p-5">
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-[11px] uppercase tracking-widest text-gold/80"><ImageIcon className="mr-1 inline h-3 w-3" /> Thumbnail moments — pick one</div>
-          {sourceUrl && <span className="text-[10px] text-muted">Frames pulled from your upload at the timestamps below</span>}
+          <div className="text-[11px] uppercase tracking-widest text-gold/80"><ImageIcon className="mr-1 inline h-3 w-3" /> Thumbnail moments</div>
+          
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {pkg.thumbnailMoments.map((m, i) => (
