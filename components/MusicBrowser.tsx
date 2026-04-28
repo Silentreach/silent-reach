@@ -31,6 +31,9 @@ interface MusicBrowserProps {
   maxDuration?: number;
   /** If true, auto-pick the first returned track when no track is yet selected. */
   autoPick?: boolean;
+  /** Track IDs already used by other platforms — autoPick will skip these
+      so each platform reel ends up with a different track. */
+  excludeIds?: number[];
 }
 
 export default function MusicBrowser({
@@ -40,6 +43,7 @@ export default function MusicBrowser({
   minDuration = 20,
   maxDuration = 120,
   autoPick = false,
+  excludeIds = [],
 }: MusicBrowserProps) {
   const [query, setQuery] = useState(defaultQuery);
   const [tracks, setTracks] = useState<PixabayTrack[]>([]);
@@ -80,8 +84,10 @@ export default function MusicBrowser({
       }
       setTracks(found);
       if (autoPick && !selectedId && found.length > 0) {
-        // Fire-and-forget — the user can override by clicking another track's "Use"
-        selectTrack(found[0]).catch(() => undefined);
+        // Skip any track already in use by another platform — gives the user
+        // distinct music per reel preview without manual searching.
+        const fresh = found.find((t: PixabayTrack) => !excludeIds.includes(t.id)) || found[0];
+        selectTrack(fresh).catch(() => undefined);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");

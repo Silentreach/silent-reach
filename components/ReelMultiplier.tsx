@@ -140,6 +140,41 @@ function pickClosestFrame(frames: ExtractedFrame[], targetSec: number): Extracte
 
 // Capture a single high-quality JPEG from a video file at a given timestamp.
 // Used to produce a downloadable thumbnail companion alongside the rendered reel.
+
+// Auto-fit a logo image: load → downsample to <=1080px on the longest side
+// → output as PNG data URL (preserves transparency for logos with alpha).
+// Why: GCs and realtors don't know about file size limits; they upload
+// whatever raw export they have. Resize silently instead of rejecting.
+async function autoFitLogoImage(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("logo decode failed"));
+      i.src = url;
+    });
+    const MAX_EDGE = 1080;
+    const longSide = Math.max(img.naturalWidth, img.naturalHeight);
+    const scale = longSide > MAX_EDGE ? MAX_EDGE / longSide : 1;
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d");
+    if (!ctx) throw new Error("canvas unavailable");
+    // Use high-quality scaling.
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, 0, 0, w, h);
+    // PNG to preserve transparency on logos that have alpha channels.
+    return c.toDataURL("image/png");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function captureThumbnailAt(file: File, timestampSec: number): Promise<Blob> {
   const url = URL.createObjectURL(file);
   try {
@@ -308,21 +343,32 @@ export default function ReelMultiplier() {
                     </>
                   ) : (
                     <button type="button" onClick={() => logoInputRef.current?.click()} className="flex w-full items-center gap-2 text-xs text-muted hover:text-text">
-                      <Upload className="h-3 w-3" /> PNG / SVG / MP4 motion logo (or use Brand Kit)
+                      <Upload className="h-3 w-3" /> Drop any logo — auto-resized · PNG / SVG / JPG / MP4 OK
                     </button>
                   )}
                   <input ref={logoInputRef} type="file"
                     accept="image/*,video/*"
                     className="hidden"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const f = e.target.files?.[0]; if (!f) return;
                       const isVid = f.type.startsWith("video/");
-                      const cap = isVid ? 30 * 1024 * 1024 : 2 * 1024 * 1024;
-                      if (f.size > cap) { alert(`Logo over ${isVid ? "30MB" : "2MB"} — please pick a smaller file. Got ${(f.size / (1024*1024)).toFixed(1)}MB.`); return; }
+                      // Motion logos: still cap at 50MB to avoid OOM during render.
                       if (isVid) {
+                        if (f.size > 50 * 1024 * 1024) {
+                          alert(`Motion logo over 50MB — render would run out of memory. Got ${(f.size / (1024*1024)).toFixed(1)}MB. Please use a shorter / lower-res clip.`);
+                          return;
+                        }
                         const url = URL.createObjectURL(f);
                         setCustomLogo({ kind: "video", url });
-                      } else {
+                        return;
+                      }
+                      // Image logos: auto-fit to 1080x1080 max, downscale via canvas.
+                      // No size rejection — we resize whatever the user drops.
+                      try {
+                        const url = await autoFitLogoImage(f);
+                        setCustomLogo({ kind: "image", url });
+                      } catch {
+                        // Fallback: load original (may be huge but won't crash the render).
                         const r = new FileReader();
                         r.onload = (ev) => setCustomLogo({ kind: "image", url: String(ev.target?.result || "") });
                         r.readAsDataURL(f);
@@ -392,6 +438,14 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
   // side-by-side in the gallery, and pick a winner without losing the other.
   const [renderedByPlatform, setRenderedByPlatform] = useState<Record<string, RenderedPreview>>({});
   const onPreviewReady = (platform: string, info: RenderedPreview) => setRenderedByPlatform((m) => ({ ...m, [platform]: info }));
+
+  // Track which Jamendo IDs have been picked across ALL platform cards so each
+  // platform's auto-pick chooses a DIFFERENT track. Keys = platform, values = trackId.
+  const [musicIdByPlatform, setMusicIdByPlatform] = useState<Record<string, number | null>>({});
+  const onTrackPicked = (platform: string, trackId: number | null) => setMusicIdByPlatform((m) => ({ ...m, [platform]: trackId }));
+  const usedIds = Object.entries(musicIdByPlatform)
+    .filter(([, id]) => typeof id === "number")
+    .map(([, id]) => id as number);
   const [active, setActive] = useState<ReelPlatform>(output.packages[0]?.platform || "instagram_reel");
   const pkg = output.packages.find((p) => p.platform === active) || output.packages[0];
 
@@ -501,7 +555,7 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
         </div>
       )}
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} customLogo={customLogo} extractedFrames={extractedFrames} onPreviewReady={onPreviewReady} />}
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} customLogo={customLogo} extractedFrames={extractedFrames} onPreviewReady={onPreviewReady} excludeMusicIds={usedIds.filter(id => id !== musicIdByPlatform[pkg.platform])} onTrackPicked={(id) => onTrackPicked(pkg.platform, id)} />}
 
       {/* Music licensing footer */}
       <div className="rounded-2xl border border-border bg-bg-deep p-5">
@@ -523,7 +577,7 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
   );
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, onPreviewReady }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; onPreviewReady: (platform: string, info: RenderedPreview) => void }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, onPreviewReady, excludeMusicIds, onTrackPicked }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; onPreviewReady: (platform: string, info: RenderedPreview) => void; excludeMusicIds: number[]; onTrackPicked: (id: number | null) => void }) {
   // Per-platform music state — each platform tab keeps its own track so the
   // user can render IG with one mood and YT with a different mood and compare.
   const [musicFile, setMusicFile] = useState<File | null>(null);
@@ -533,6 +587,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
     const f = new File([blob], `jamendo_${track.id}.mp3`, { type: "audio/mpeg" });
     setMusicFile(f);
     setPixabayTrackId(track.id);
+    onTrackPicked(track.id); // tell parent so other platforms exclude this id
     detectBPM(f).then((bpm) => setMusicBPM(bpm));
   };
   const [copied, setCopied] = useState<string | null>(null);
@@ -843,6 +898,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             minDuration={20}
             maxDuration={120}
             autoPick={true}
+            excludeIds={excludeMusicIds}
           />
           <p className="text-[10px] text-muted mt-2">
             Royalty-free CC-BY (commercial-OK with attribution). Drop credit in your video description: <em>Music: &quot;Track Name&quot; by Artist · jamendo.com</em>
