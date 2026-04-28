@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Save, Check, Upload, Trash2, Lightbulb } from "lucide-react";
-import { getBrandKit, setBrandKit, type BrandKit } from "@/lib/userContext";
+import { Loader2 } from "lucide-react";
+import { getBrandKit, setBrandKit, type BrandKit } from "@/lib/db/brandKit";
 
 const SWATCHES = ["#d4af37", "#ffffff", "#0a0a0a", "#e8c764", "#f5efe7", "#1c1c1c"];
 
@@ -12,9 +13,18 @@ export default function BrandKitPage() {
   const [savedTick, setSavedTick] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    setKit(getBrandKit());
-    setLoaded(true);
+    (async () => {
+      try {
+        setKit(await getBrandKit());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load brand kit");
+      } finally {
+        setLoaded(true);
+      }
+    })();
   }, []);
 
   const update = (k: keyof BrandKit, v: string | undefined) =>
@@ -31,13 +41,27 @@ export default function BrandKitPage() {
     r.readAsDataURL(file);
   };
 
-  const save = () => {
-    setBrandKit(kit);
-    setSavedTick(true);
-    setTimeout(() => setSavedTick(false), 1500);
-  };
+  const [saving, setSaving] = useState(false);
 
-  if (!loaded) return null;
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await setBrandKit(kit);
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!loaded) return (
+    <div className="flex items-center gap-2 text-muted">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading your brand kit…
+    </div>
+  );
 
   return (
     <div className="space-y-10">
@@ -152,15 +176,21 @@ export default function BrandKitPage() {
       <div className="flex items-center justify-between border-t border-border/60 pt-6">
         <div className="flex items-center gap-2 text-xs text-muted">
           <Lightbulb className="h-3.5 w-3.5 text-gold/70" />
-          Stored locally in your browser.
+          Stored on your account — visible to everyone in your org.
         </div>
-        <button
-          onClick={save}
-          className="inline-flex items-center gap-1.5 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light"
-        >
-          {savedTick ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-          {savedTick ? "Saved" : "Save brand kit"}
-        </button>
+        <div className="flex items-center gap-3">
+          {error && (
+            <span className="text-xs text-rose-300">{error}</span>
+          )}
+          <button
+            onClick={save}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:bg-neutral-700 disabled:text-neutral-400"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : savedTick ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+            {saving ? "Saving…" : savedTick ? "Saved" : "Save brand kit"}
+          </button>
+        </div>
       </div>
     </div>
   );

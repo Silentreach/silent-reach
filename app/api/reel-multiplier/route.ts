@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generateReelMultiplier } from "@/lib/claude";
+import { getServerUserContext } from "@/lib/db/serverContext";
 
 /* The client extracts frames in the browser and sends them as base64 strings (no data: prefix).
    We accept up to 8 frames per call to stay under Claude's vision token budget. */
@@ -52,7 +53,12 @@ export async function POST(req: NextRequest) {
     const ctxParsed = UserContextSchema.safeParse(
       body && typeof body === "object" ? body.userContext : undefined
     );
-    const ctx = ctxParsed.success ? ctxParsed.data : undefined;
+    const bodyCtx = ctxParsed.success ? ctxParsed.data : undefined;
+
+    // Source of truth = DB (per signed-in user). Body context only fills in
+    // gaps for unmigrated clients. DB voice samples beat body voice samples.
+    const dbCtx = await getServerUserContext().catch(() => undefined);
+    const ctx = mergeUserContext(dbCtx, bodyCtx);
 
     const { sourceDurationSec, description, series, contentType, frames } = parsed.data;
     const output = await generateReelMultiplier(
@@ -65,4 +71,16 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "Unknown server error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+function mergeUserContext(
+  db: { voiceSamples?: string[]; voiceNotes?: string; brand?: Record<string, unknown> } | undefined,
+  body: { voiceSamples?: string[]; voiceNotes?: string; brand?: Record<string, unknown> } | undefined,
+) {
+  if (!db && !body) return undefined;
+  return {
+    voiceSamples: (db?.voiceSamples?.length ? db.voiceSamples : body?.voiceSamples) || [],
+    voiceNotes:   db?.voiceNotes || body?.voiceNotes || "",
+    brand:        Object.keys(db?.brand || {}).length ? (db?.brand as Record<string, string>) : ((body?.brand as Record<string, string>) || {}),
+  };
 }

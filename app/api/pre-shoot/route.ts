@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generatePreShoot } from "@/lib/claude";
+import { getServerUserContext } from "@/lib/db/serverContext";
 
 const UserContextSchema = z
   .object({
@@ -58,4 +59,13 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "Unknown server error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+function mergeUserContext(db: any, body: any) {
+  if (!db && !body) return undefined;
+  return {
+    voiceSamples: (db?.voiceSamples?.length ? db.voiceSamples : body?.voiceSamples) || [],
+    voiceNotes:   db?.voiceNotes || body?.voiceNotes || "",
+    brand:        Object.keys(db?.brand || {}).length ? db.brand : (body?.brand || {}),
+  };
 }

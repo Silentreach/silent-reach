@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Header from "@/components/Header";
+import MigrationGate from "@/components/MigrationGate";
 import Footer from "@/components/Footer";
 import "./globals.css";
 
@@ -34,6 +35,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="grain min-h-screen bg-bg text-text">
         <Header />
+        <MigrationGate />
         <main className="mx-auto max-w-6xl px-5 py-10">{children}</main>
         <Footer />
       </body>
