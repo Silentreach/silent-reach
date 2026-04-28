@@ -750,6 +750,33 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
         </div>
       )}
 
+      {/* Music for this reel — single-source picker, replaces the old AI-suggestion card */}
+      {sourceFile && (
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <div className="text-[11px] uppercase tracking-widest text-gold/85">
+              <Music className="mr-1 inline h-3 w-3" /> Music for this reel
+            </div>
+            {pkg.musicSuggestions?.[0]?.mood && (
+              <span className="text-[11px] text-muted">
+                · AI suggests: {pkg.musicSuggestions[0].mood.split(",")[0].trim()}
+                {pkg.musicSuggestions[0].bpm ? ` · ~${pkg.musicSuggestions[0].bpm} BPM` : ""}
+              </span>
+            )}
+          </div>
+          <MusicBrowser
+            defaultQuery={(pkg.musicSuggestions?.[0]?.mood?.split(",")[0].trim() || pkg.musicSuggestions?.[0]?.genre || "cinematic").toLowerCase()}
+            onSelect={onPickMusic}
+            selectedId={pixabayTrackId}
+            minDuration={20}
+            maxDuration={120}
+          />
+          <p className="text-[10px] text-muted mt-2">
+            Royalty-free CC-BY (commercial-OK with attribution). Drop credit in your video description: <em>Music: &quot;Track Name&quot; by Artist · jamendo.com</em>
+          </p>
+        </div>
+      )}
+
       {/* Cut + hook + caption row */}
       <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         {/* Left: cut + hook */}
@@ -879,59 +906,21 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
         </div>
       </div>
 
-      {/* Music + posting time + first comment */}
+      {/* Posting time + first comment — music moved up to the render area */}
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-surface p-5">
-          <div className="text-[11px] uppercase tracking-widest text-gold/80"><Music className="mr-1 inline h-3 w-3" /> Music suggestions</div>
-          <ul className="mt-3 space-y-3">
-            {pkg.musicSuggestions.map((m, i) => (
-              <li key={i} className="rounded-lg border border-border bg-bg-deep p-3">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-gold/10 px-2 py-0.5 text-xs text-gold">{m.mood}</span>
-                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-text/80">{m.genre}</span>
-                  {m.bpm ? <span className="text-[10px] text-muted">~{m.bpm} BPM</span> : null}
-                </div>
-                <div className="mt-1.5 text-sm text-text/90">{m.instrumentation}</div>
-                {m.similarTo && <div className="text-xs text-muted">Similar to: {m.similarTo}</div>}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <ExtLink href={`https://www.epidemicsound.com/search/?term=${encodeURIComponent(m.searchQuery)}`} label="Search Epidemic Sound" />
-                  <ExtLink href={`https://artlist.io/royalty-free-music?terms=${encodeURIComponent(m.searchQuery)}`} label="Search Artlist" />
-                </div>
-                {m.licensingNote && <div className="mt-1 text-[11px] text-muted">{m.licensingNote}</div>}
-              </li>
-            ))}
-          </ul>
-
-          {/* Pixabay music browser — pick a track in-app, no leaving Mintflow. */}
-          <div className="mt-4 rounded-lg border border-mint/40 bg-mint/5 p-3">
-            <div className="text-[11px] uppercase tracking-widest text-mint/85 mb-2">
-              <Music className="mr-1 inline h-3 w-3" /> Or pick a track right here (royalty-free)
-            </div>
-            <MusicBrowser
-              defaultQuery={pkg.musicSuggestions?.[0]?.searchQuery || pkg.musicSuggestions?.[0]?.mood || ""}
-              onSelect={onPickMusic}
-              selectedId={pixabayTrackId}
-              minDuration={20}
-              maxDuration={120}
-            />
-          </div>
+          <div className="text-[11px] uppercase tracking-widest text-gold/80"><Clock className="mr-1 inline h-3 w-3" /> Best time to post</div>
+          <div className="mt-2 font-display text-lg text-text">{pkg.postingTime.window}</div>
+          <p className="mt-1 text-sm text-muted">{pkg.postingTime.rationale}</p>
         </div>
-
-        <div className="space-y-3">
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="text-[11px] uppercase tracking-widest text-gold/80"><Clock className="mr-1 inline h-3 w-3" /> Best time to post</div>
-            <div className="mt-2 font-display text-lg text-text">{pkg.postingTime.window}</div>
-            <p className="mt-1 text-sm text-muted">{pkg.postingTime.rationale}</p>
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] uppercase tracking-widest text-gold/80"><MessageSquare className="mr-1 inline h-3 w-3" /> Drop this as the first comment</div>
+            <button onClick={() => copy("first", pkg.firstComment)} className="text-xs text-muted hover:text-text">
+              {copied === "first" ? <><Check className="inline h-3 w-3 text-gold" /> Copied</> : "Copy"}
+            </button>
           </div>
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="flex items-center justify-between">
-              <div className="text-[11px] uppercase tracking-widest text-gold/80"><MessageSquare className="mr-1 inline h-3 w-3" /> Drop this as the first comment</div>
-              <button onClick={() => copy("first", pkg.firstComment)} className="text-xs text-muted hover:text-text">
-                {copied === "first" ? <><Check className="inline h-3 w-3 text-gold" /> Copied</> : "Copy"}
-              </button>
-            </div>
-            <p className="mt-2 text-sm text-text/90">{pkg.firstComment}</p>
-          </div>
+          <p className="mt-2 text-sm text-text/90">{pkg.firstComment}</p>
         </div>
       </div>
     </div>

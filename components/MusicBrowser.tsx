@@ -52,7 +52,7 @@ export default function MusicBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function doSearch(q: string) {
+  async function doSearch(q: string, isRetry = false) {
     if (!q.trim()) return;
     setLoading(true);
     setError(null);
@@ -64,7 +64,18 @@ export default function MusicBrowser({
       const r = await fetch(url.toString());
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `Search failed (${r.status})`);
-      setTracks(data.tracks || []);
+      const found = data.tracks || [];
+      // Auto-broaden if first attempt is empty: drop everything after the
+      // first space-separated word and try again. Most AI queries are too
+      // specific (e.g. "modern uplifting electronic 120 bpm") — broader
+      // queries return way more matches.
+      if (found.length === 0 && !isRetry) {
+        const firstWord = q.trim().split(/\s+/)[0];
+        if (firstWord && firstWord.length >= 3 && firstWord.toLowerCase() !== q.toLowerCase()) {
+          return await doSearch(firstWord, true);
+        }
+      }
+      setTracks(found);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
     } finally {

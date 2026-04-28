@@ -268,13 +268,18 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     masterGain.gain.linearRampToValueAtTime(0, t0 + totalMainDur);
   }
 
-  /* Pre-seek to the FIRST segment before we start recording, so the very
-     first recorded frame is already the right shot — no black or pre-roll. */
+  /* Pre-seek + multi-paint stabilization: MediaRecorder will record black
+     frames if the captureStream hasn't observed a stable canvas frame before
+     recorder.start(). 80ms wasn't enough on slower devices — bump to 250ms
+     plus a double-paint that spans two requestAnimationFrame ticks so the
+     captureStream definitely has the frame in its buffer. */
   await seekTo(video, segments[0].startSec);
-  await new Promise((r) => setTimeout(r, 80));
-  // Force one canvas paint with the first seeked frame so the captureStream
-  // has a real frame ready when the recorder starts.
-  drawFrame(ctx, video, dims);
+  await new Promise((r) => setTimeout(r, 250));
+  drawFrame(ctx, video, dims, 1, segments[0].cropBiasX ?? 0.5, segments[0].cropBiasY ?? 0.5);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  drawFrame(ctx, video, dims, 1, segments[0].cropBiasX ?? 0.5, segments[0].cropBiasY ?? 0.5);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise((r) => setTimeout(r, 60));
 
   recorder.start();
   if (musicNode) musicNode.start();
