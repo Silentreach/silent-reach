@@ -577,6 +577,30 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
   );
 }
 
+
+// Build a platform-specific Jamendo query by mixing the AI's suggested mood
+// with a platform energy tag. Each platform queries a DIFFERENT pool of music
+// so the auto-pick draws from genuinely distinct buckets.
+//
+//   IG  → punchy / energetic
+//   YT  → cinematic / atmospheric
+//   FB  → warm / smooth
+//
+// This is on top of the excludeIds filter, which dedupes within results.
+function buildPlatformMusicQuery(pkg: ReelPackage): string {
+  const mood = pkg.musicSuggestions?.[0]?.mood?.split(",")[0].trim().toLowerCase() || "";
+  const genre = pkg.musicSuggestions?.[0]?.genre?.toLowerCase() || "";
+  const platformTag =
+    pkg.platform === "instagram_reel" ? "energetic" :
+    pkg.platform === "youtube_short"  ? "cinematic" :
+                                        "warm";
+  // Prefer mood; fall back to genre; always combine with platform tag for variety.
+  const base = mood || genre || "cinematic";
+  // If the AI's mood already contains the platform tag's vibe, just use base.
+  if (base.includes(platformTag)) return base;
+  return `${platformTag} ${base}`;
+}
+
 function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, onPreviewReady, excludeMusicIds, onTrackPicked }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; onPreviewReady: (platform: string, info: RenderedPreview) => void; excludeMusicIds: number[]; onTrackPicked: (id: number | null) => void }) {
   // Per-platform music state — each platform tab keeps its own track so the
   // user can render IG with one mood and YT with a different mood and compare.
@@ -892,7 +916,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             )}
           </div>
           <MusicBrowser
-            defaultQuery={(pkg.musicSuggestions?.[0]?.mood?.split(",")[0].trim() || pkg.musicSuggestions?.[0]?.genre || "cinematic").toLowerCase()}
+            defaultQuery={buildPlatformMusicQuery(pkg)}
             onSelect={onPickMusic}
             selectedId={pixabayTrackId}
             minDuration={20}

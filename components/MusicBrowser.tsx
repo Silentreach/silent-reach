@@ -84,10 +84,14 @@ export default function MusicBrowser({
       }
       setTracks(found);
       if (autoPick && !selectedId && found.length > 0) {
-        // Skip any track already in use by another platform — gives the user
-        // distinct music per reel preview without manual searching.
-        const fresh = found.find((t: PixabayTrack) => !excludeIds.includes(t.id)) || found[0];
-        selectTrack(fresh).catch(() => undefined);
+        // Skip any track already in use by another platform, then pick a
+        // RANDOM track from the top 4 candidates. Randomizing within results
+        // means two renders never produce the exact same music, even if the
+        // user just clicks 'Render preview' twice on the same platform.
+        const candidates = found.filter((t: PixabayTrack) => !excludeIds.includes(t.id)).slice(0, 4);
+        const pool = candidates.length > 0 ? candidates : found.slice(0, 4);
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        selectTrack(pick).catch(() => undefined);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");

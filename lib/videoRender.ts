@@ -163,7 +163,11 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   // When MP4 wins here, the ReelMultiplier render flow skips ffmpeg.wasm transcoding
   // entirely (see the mimeType.includes("mp4") branch in onRender).
   const candidates = [
-    "video/mp4;codecs=avc1.42E01E,mp4a.40.2", // h264 baseline + AAC-LC, broadest playback
+    // Try High profile first — best static-area quality at the same bitrate.
+    // CABAC + 8x8 DCT + B-frames make luxury-house gradients flicker-free.
+    "video/mp4;codecs=avc1.640028,mp4a.40.2",  // h264 High profile level 4.0
+    "video/mp4;codecs=avc1.4D401F,mp4a.40.2",  // h264 Main profile level 3.1 fallback
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",  // h264 Baseline + AAC-LC, broadest playback
     "video/mp4;codecs=avc1,mp4a",
     "video/mp4;codecs=avc1",
     "video/mp4",
@@ -175,7 +179,7 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   opts.onStage?.("analyzing", 0);
   const recorder = new MediaRecorder(outputStream, {
     mimeType,
-    videoBitsPerSecond: 9_000_000,
+    videoBitsPerSecond: 12_000_000, // 12Mbps — extra headroom kills macroblock noise in luxury static shots
     audioBitsPerSecond: 128_000,
   });
   const chunks: Blob[] = [];
