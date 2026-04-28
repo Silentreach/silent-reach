@@ -21,6 +21,17 @@ const FRAME_COUNT = 12; // 12 frames at 1080p quality gives the AI real context 
 const FRAME_MAX_W = 640; // smaller per-frame so we can afford 12 of them in one Haiku call
 const MOTION_SAMPLE_W = 96; // tiny resize for cheap pixel-diff motion calc
 
+
+
+interface RenderedPreview {
+  url: string;
+  mime: string;
+  filename: string;
+  thumbUrl: string | null;
+  thumbName: string;
+  trackTitle?: string;
+}
+
 interface ExtractedFrame { data: string; mediaType: "image/jpeg"; timestampSec: number; motionDelta: number; subjectZone?: SubjectZone; }
 
 /**
@@ -178,12 +189,7 @@ export default function ReelMultiplier() {
   const [description, setDescription] = useState<string>("");
   const [series, setSeries] = useState<string>("");
   const [stage, setStage] = useState<"idle" | "extracting" | "thinking" | "done" | "error">("idle");
-  const [musicFile, setMusicFile] = useState<File | null>(null);
-  const [pixabayTrackId, setPixabayTrackId] = useState<number | null>(null);
-  const [musicBPM, setMusicBPM] = useState<number | null>(null);
-  const [analyzingBPM, setAnalyzingBPM] = useState(false);
   const [customLogo, setCustomLogo] = useState<{kind: "image" | "video"; url: string} | null>(null);
-  const musicInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<ReelMultiplierOutput | null>(null);
@@ -286,46 +292,8 @@ export default function ReelMultiplier() {
               <input type="text" value={series} onChange={(e) => setSeries(e.target.value)} placeholder="e.g. 868 Orono Avenue" />
             </Field>
 
-            {/* Optional: music + logo for the rendered output */}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Music track (optional — replaces source audio + drives beat-synced cuts)">
-                <div className="flex items-center gap-2 rounded-md border border-border bg-bg p-2">
-                  {musicFile ? (
-                    <>
-                      <Music className="h-3.5 w-3.5 text-gold" />
-                      <span className="flex-1 truncate text-xs text-text/85">{musicFile.name}</span>
-                      <button type="button" onClick={() => { setMusicFile(null); setMusicBPM(null); }} className="text-xs text-muted hover:text-text"><X className="h-3 w-3" /></button>
-                    </>
-                  ) : (
-                    <button type="button" onClick={() => musicInputRef.current?.click()} className="flex w-full items-center gap-2 text-xs text-muted hover:text-text">
-                      <Upload className="h-3 w-3" /> Upload .mp3 / .wav / .m4a
-                    </button>
-                  )}
-                  <input ref={musicInputRef} type="file" accept="audio/*" className="hidden"
-                    onChange={async (e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      setMusicFile(f);
-                      setMusicBPM(null);
-                      setAnalyzingBPM(true);
-                      const bpm = await detectBPM(f).catch(() => null);
-                      setMusicBPM(bpm);
-                      setAnalyzingBPM(false);
-                    }} />
-                </div>
-                {musicFile && (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted">
-                    {analyzingBPM ? (
-                      <><Loader2 className="h-3 w-3 animate-spin text-gold" /> Detecting BPM…</>
-                    ) : musicBPM ? (
-                      <><span className="text-gold">♪ {musicBPM.toFixed(1)} BPM</span> · cuts auto-snap to beats (±0.25s)</>
-                    ) : (
-                      <>BPM not detected — cuts will use AI markers as-is</>
-                    )}
-                  </div>
-                )}
-              </Field>
-
+            {/* Brand logo for the rendered output — music is now per-platform inside each reel card */}
+            <div className="grid gap-3 sm:grid-cols-1">
               <Field label="Brand logo (PNG / SVG / MP4 motion logo)">
                 <div className="flex items-center gap-2 rounded-md border border-border bg-bg p-2">
                   {customLogo ? (
@@ -397,7 +365,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} onPickMusic={(track, blob) => { const f = new File([blob], `jamendo_${track.id}.mp3`, { type: "audio/mpeg" }); setMusicFile(f); setPixabayTrackId(track.id); detectBPM(f).then((bpm) => setMusicBPM(bpm)); }} pixabayTrackId={pixabayTrackId} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} customLogo={customLogo} extractedFrames={extractedFrames} />}
     </div>
   );
 }
@@ -419,7 +387,11 @@ const PLATFORM_META: Record<ReelPlatform, { label: string; icon: typeof Instagra
   facebook_reel:  { label: "Facebook Reel",  icon: Facebook,  color: "from-blue-500/30 to-sky-500/30" },
 };
 
-function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, musicBPM, extractedFrames, onPickMusic, pixabayTrackId }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null; extractedFrames: ExtractedFrame[]; onPickMusic: (track: PixabayTrack, blob: Blob) => void; pixabayTrackId: number | null }) {
+function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrames }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[] }) {
+  // Per-platform rendered previews so the user can render IG + YT both, see them
+  // side-by-side in the gallery, and pick a winner without losing the other.
+  const [renderedByPlatform, setRenderedByPlatform] = useState<Record<string, RenderedPreview>>({});
+  const onPreviewReady = (platform: string, info: RenderedPreview) => setRenderedByPlatform((m) => ({ ...m, [platform]: info }));
   const [active, setActive] = useState<ReelPlatform>(output.packages[0]?.platform || "instagram_reel");
   const pkg = output.packages.find((p) => p.platform === active) || output.packages[0];
 
@@ -448,7 +420,88 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, mus
         })}
       </div>
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} musicFile={musicFile} customLogo={customLogo} musicBPM={musicBPM} extractedFrames={extractedFrames} onPickMusic={onPickMusic} pixabayTrackId={pixabayTrackId} />}
+
+
+      {/* Rendered Reels gallery — shows all platforms the user has rendered.
+          Stacks side-by-side once 2+ platforms are rendered. */}
+      {Object.keys(renderedByPlatform).length > 0 && (
+        <div className="rounded-2xl border border-mint/40 bg-mint/5 p-5">
+          <div className="text-[11px] uppercase tracking-widest text-mint/85 mb-3">
+            <Check className="mr-1 inline h-3 w-3" /> Your rendered reels — pick a winner ({Object.keys(renderedByPlatform).length} ready)
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {Object.entries(renderedByPlatform).map(([platform, info]) => {
+              const meta = PLATFORM_META[platform as ReelPlatform];
+              const Icon = meta?.icon || Music;
+              return (
+                <div key={platform} className="rounded-xl border border-border bg-bg-deep/40 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="inline-flex items-center gap-1.5 text-xs text-text/85">
+                      <Icon className="h-3.5 w-3.5 text-gold" /> {meta?.label || platform}
+                    </div>
+                    <button
+                      onClick={() => {
+                        URL.revokeObjectURL(info.url);
+                        if (info.thumbUrl) URL.revokeObjectURL(info.thumbUrl);
+                        setRenderedByPlatform((m) => {
+                          const n = { ...m };
+                          delete n[platform];
+                          return n;
+                        });
+                      }}
+                      className="text-xs text-muted hover:text-rose-400"
+                      aria-label="Remove this preview"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <video
+                    src={info.url}
+                    controls
+                    playsInline
+                    className="w-full rounded-lg bg-black aspect-[9/16] object-contain border border-border/60"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => {
+                        const a = document.createElement("a");
+                        a.href = info.url;
+                        a.download = info.filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-gold px-3 py-1.5 text-xs font-medium text-black hover:bg-gold-light"
+                    >
+                      <Download className="h-3 w-3" /> Reel
+                    </button>
+                    {info.thumbUrl && (
+                      <button
+                        onClick={() => {
+                          const a = document.createElement("a");
+                          a.href = info.thumbUrl as string;
+                          a.download = info.thumbName || "thumbnail.jpg";
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border-strong bg-bg px-3 py-1.5 text-xs text-text hover:border-mint/60"
+                      >
+                        <Download className="h-3 w-3" /> Thumbnail
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-[11px] text-muted">
+            Render another platform from the tabs below — it&apos;ll appear here next to this one. Use the X to remove a preview if you want to re-render it with different cuts or music.
+          </p>
+        </div>
+      )}
+
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} customLogo={customLogo} extractedFrames={extractedFrames} onPreviewReady={onPreviewReady} />}
 
       {/* Music licensing footer */}
       <div className="rounded-2xl border border-border bg-bg-deep p-5">
@@ -470,7 +523,18 @@ function ReelResults({ output, sourceUrl, sourceFile, musicFile, customLogo, mus
   );
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicBPM, extractedFrames, onPickMusic, pixabayTrackId }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; musicFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; musicBPM: number | null; extractedFrames: ExtractedFrame[]; onPickMusic: (track: PixabayTrack, blob: Blob) => void; pixabayTrackId: number | null }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, onPreviewReady }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; onPreviewReady: (platform: string, info: RenderedPreview) => void }) {
+  // Per-platform music state — each platform tab keeps its own track so the
+  // user can render IG with one mood and YT with a different mood and compare.
+  const [musicFile, setMusicFile] = useState<File | null>(null);
+  const [musicBPM, setMusicBPM] = useState<number | null>(null);
+  const [pixabayTrackId, setPixabayTrackId] = useState<number | null>(null);
+  const onPickMusic = (track: PixabayTrack, blob: Blob) => {
+    const f = new File([blob], `jamendo_${track.id}.mp3`, { type: "audio/mpeg" });
+    setMusicFile(f);
+    setPixabayTrackId(track.id);
+    detectBPM(f).then((bpm) => setMusicBPM(bpm));
+  };
   const [copied, setCopied] = useState<string | null>(null);
   const copy = async (label: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(null), 1500); } catch {}
@@ -613,6 +677,14 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
       }
 
       setRenderState("ready");
+      // Bubble up so parent gallery can show this preview alongside other platforms.
+      onPreviewReady(pkg.platform, {
+        url: newUrl,
+        mime: finalBlob.type,
+        filename: `mintflow_${platformShort}_${tag}.${finalExt}`,
+        thumbUrl: previewThumbUrl,
+        thumbName: previewThumbName,
+      });
     } catch (err: unknown) {
       setRenderError(err instanceof Error ? err.message : "Couldn’t render the reel.");
       setRenderState("error");
