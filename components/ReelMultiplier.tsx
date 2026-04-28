@@ -645,6 +645,13 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
 
   return (
     <div className="space-y-6">
+        {/* B7: iOS Safari render reliability disclaimer */}
+        {typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent) && !/CriOS|EdgiOS/.test(navigator.userAgent) && (
+          <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 p-3 text-xs text-amber-200">
+            <strong>iOS Safari note:</strong> Reel rendering is unreliable on iPhone/iPad Safari. For best results use desktop Chrome, desktop Safari 17+, or Edge. iOS Chrome works the same as Safari.
+          </div>
+        )}
+
       {/* Platform tabs */}
       <div className="flex flex-wrap gap-2">
         {output.packages.map((p) => {
@@ -742,7 +749,7 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
         </div>
       )}
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} customLogo={customLogo} extractedFrames={extractedFrames} onPreviewReady={onPreviewReady} excludeMusicIds={usedIds.filter(id => id !== musicIdByPlatform[pkg.platform])} onTrackPicked={(id) => onTrackPicked(pkg.platform, id)} />}
+      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} customLogo={customLogo} extractedFrames={extractedFrames} onPreviewReady={onPreviewReady} excludeMusicIds={usedIds.filter(id => id !== musicIdByPlatform[pkg.platform])} onTrackPicked={(id) => onTrackPicked(pkg.platform, id)} stillInGallery={pkg.platform in renderedByPlatform} />}
 
     </div>
   );
@@ -772,7 +779,7 @@ function buildPlatformMusicQuery(pkg: ReelPackage): string {
   return `${platformTag} ${base}`;
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, onPreviewReady, excludeMusicIds, onTrackPicked }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; onPreviewReady: (platform: string, info: RenderedPreview) => void; excludeMusicIds: number[]; onTrackPicked: (id: number | null) => void }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, onPreviewReady, excludeMusicIds, onTrackPicked, stillInGallery }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; onPreviewReady: (platform: string, info: RenderedPreview) => void; excludeMusicIds: number[]; onTrackPicked: (id: number | null) => void; stillInGallery: boolean }) {
   // Per-platform music state — each platform tab keeps its own track so the
   // user can render IG with one mood and YT with a different mood and compare.
   const [musicFile, setMusicFile] = useState<File | null>(null);
@@ -802,6 +809,19 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
   // Preview-before-download state
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewMime, setPreviewMime] = useState<string>("");
+
+  // If parent gallery dropped this platform, reset the local preview so the
+  // child's "Preview ready" panel doesn\'t point at a revoked URL.
+  useEffect(() => {
+    if (!stillInGallery && previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
+      setPreviewUrl(null);
+      setPreviewThumbUrl(null);
+      setRenderState("idle");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stillInGallery]);
   const [previewFilename, setPreviewFilename] = useState<string>("");
   const [previewThumbUrl, setPreviewThumbUrl] = useState<string | null>(null);
   const [previewThumbName, setPreviewThumbName] = useState<string>("");
@@ -862,7 +882,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
           endSec: c.endSec,
           cropBiasX: closest?.subjectZone?.confidence && closest.subjectZone.confidence > 0.3 ? closest.subjectZone.centerX : 0.5,
           cropBiasY: closest?.subjectZone?.confidence && closest.subjectZone.confidence > 0.3 ? closest.subjectZone.centerY : 0.5,
-          transitionIn: i === 0 ? "dip" as const : inferTransition(prev?.motionDelta, closest?.motionDelta),
+          transitionIn: "dip" as const, // whip/crossfade not yet implemented in renderer
         };
       });
       // Tighter beat snap (was 0.4, now 0.25 — only snap if VERY close to a beat).
@@ -915,26 +935,30 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
       setPreviewMime(finalBlob.type);
       setPreviewFilename(`mintflow_${platformShort}_${tag}.${finalExt}`);
 
-      // AI thumbnail companion — capture first-listed thumbnail moment from source.
+      setRenderState("ready");
+      // Bubble up so parent gallery can show this preview alongside other platforms.
+      // Capture thumb URL into a local variable (state isn\'t guaranteed flushed yet).
+      let freshThumbUrl: string | null = null;
+      let freshThumbName: string = "";
       try {
         if (sourceFile && pkg.thumbnailMoments?.[0]?.timestampSec != null) {
           const thumbBlob = await captureThumbnailAt(sourceFile, pkg.thumbnailMoments[0].timestampSec);
+          freshThumbUrl = URL.createObjectURL(thumbBlob);
+          freshThumbName = `mintflow_${platformShort}_${tag}_thumb.jpg`;
           if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
-          setPreviewThumbUrl(URL.createObjectURL(thumbBlob));
-          setPreviewThumbName(`mintflow_${platformShort}_${tag}_thumb.jpg`);
+          setPreviewThumbUrl(freshThumbUrl);
+          setPreviewThumbName(freshThumbName);
         }
       } catch (thumbErr) {
         console.warn("Thumbnail capture failed (non-fatal)", thumbErr);
       }
 
-      setRenderState("ready");
-      // Bubble up so parent gallery can show this preview alongside other platforms.
       onPreviewReady(pkg.platform, {
         url: newUrl,
         mime: finalBlob.type,
-        filename: `mintflow_${platformShort}_${tag}.${finalExt}`,
-        thumbUrl: previewThumbUrl,
-        thumbName: previewThumbName,
+        filename: `mintflow_${platformShort}_${tag}_${Date.now().toString(36).slice(-5)}.${finalExt}`,
+        thumbUrl: freshThumbUrl,
+        thumbName: freshThumbName,
       });
     } catch (err: unknown) {
       setRenderError(err instanceof Error ? err.message : "Couldn’t render the reel.");
@@ -980,7 +1004,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
           </div>
           <button
             onClick={onRender}
-            disabled={renderState === "rendering" || !sourceFile}
+            disabled={renderState === "rendering" || !sourceFile || editedCuts.length === 0 || !editedHook.trim()}
             className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60"
           >
             {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> {renderPhase === "convert" ? "Converting" : stageLabel(renderStage)} {(renderPct * 100).toFixed(0)}%</>}

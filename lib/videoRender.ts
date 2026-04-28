@@ -259,13 +259,21 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   /* Schedule audio fadeout to align with the visual one. Music continues
      into the outro at a lower volume; source audio fades to 0 at end of main. */
   const t0 = audioCtx.currentTime;
-  // Music holds full volume through visuals + outro, fades only in the LAST 0.5s.
-  // Source audio (when no music uploaded) fades with the visual end of main.
-  const MUSIC_TAIL = 0.5;
+  // Music fade aligns with the visual fade-to-black at end of main, then holds
+  // a low residual through the outro and fades to silence at outro end. This
+  // matches the cinematographer expectation: when the visuals dim, the music
+  // dips with them — not "full music continues over a black screen for 1.5s."
   if (musicNode) {
     masterGain.gain.setValueAtTime(0.9, t0);
-    masterGain.gain.setValueAtTime(0.9, t0 + totalRenderDur - MUSIC_TAIL);
-    masterGain.gain.linearRampToValueAtTime(0, t0 + totalRenderDur - 0.05);
+    // Hold full through main UNTIL fade window, then ramp with visuals.
+    masterGain.gain.setValueAtTime(0.9, t0 + totalMainDur - fadeOutSec);
+    masterGain.gain.linearRampToValueAtTime(includeOutro ? 0.55 : 0, t0 + totalMainDur);
+    if (includeOutro) {
+      masterGain.gain.setValueAtTime(0.55, t0 + totalMainDur);
+      // Hold low through outro, fade to silence in last 0.4s.
+      masterGain.gain.setValueAtTime(0.55, t0 + totalRenderDur - 0.4);
+      masterGain.gain.linearRampToValueAtTime(0, t0 + totalRenderDur - 0.05);
+    }
   } else if (mediaSourceNode) {
     masterGain.gain.setValueAtTime(0.9, t0);
     masterGain.gain.setValueAtTime(0.9, t0 + totalMainDur - fadeOutSec);

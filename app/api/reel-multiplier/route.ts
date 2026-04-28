@@ -66,6 +66,29 @@ export async function POST(req: NextRequest) {
       frames,
       ctx
     );
+
+    // Sanitize cutMarkers per package: drop bad ones, clamp to source duration,
+    // sort by start, remove overlaps, cap at 6. Without this, Claude occasionally
+    // returns cuts past source end (renderer would render a held still frame),
+    // overlapping ranges (audio doubles), or single-frame cuts under 1s.
+    if (output?.packages) {
+      for (const pkg of output.packages) {
+        pkg.cutMarkers = sanitizeCuts(pkg.cutMarkers || [], sourceDurationSec);
+      }
+      // If any package ends with zero usable cuts, surface a 422.
+      const broken = output.packages.find((p) => !p.cutMarkers?.length);
+      if (broken) {
+        return NextResponse.json(
+          { error: "AI returned cuts that didn\'t fit your source video. Please try again — usually a one-time hiccup." },
+          { status: 422 }
+        );
+      }
+    }
+
+    // Fire-and-forget usage log: tracks Anthropic spend per org for billing
+    // and rate-limit decisions later. Don\'t block the response.
+    logUsage("reel_multiplier", "claude-haiku-4-5", output).catch(() => undefined);
+
     return NextResponse.json({ output });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown server error";
@@ -83,4 +106,67 @@ function mergeUserContext(
     voiceNotes:   db?.voiceNotes || body?.voiceNotes || "",
     brand:        Object.keys(db?.brand || {}).length ? (db?.brand as Record<string, string>) : ((body?.brand as Record<string, string>) || {}),
   };
+}
+
+
+interface CutLike { startSec: number; endSec: number; reason?: string }
+function sanitizeCuts(cuts: CutLike[], sourceDurationSec: number): CutLike[] {
+  const cleaned = cuts
+    .map((c) => ({
+      startSec: Math.max(0, Math.min(sourceDurationSec, Number(c.startSec) || 0)),
+      endSec:   Math.max(0, Math.min(sourceDurationSec, Number(c.endSec)   || 0)),
+      reason:   c.reason,
+    }))
+    .filter((c) => isFinite(c.startSec) && isFinite(c.endSec))
+    .filter((c) => c.endSec > c.startSec + 1.0)        // drop slivers
+    .sort((a, b) => a.startSec - b.startSec);
+
+  // Remove overlaps: keep first, push later starts past prior end.
+  const noOverlap: CutLike[] = [];
+  for (const c of cleaned) {
+    const last = noOverlap[noOverlap.length - 1];
+    if (!last || c.startSec >= last.endSec) {
+      noOverlap.push(c);
+    } else if (c.endSec > last.endSec + 1.0) {
+      // Salvage the tail past the overlap if it\'s long enough.
+      noOverlap.push({ startSec: last.endSec + 0.1, endSec: c.endSec, reason: c.reason });
+    }
+  }
+  return noOverlap.slice(0, 6);
+}
+
+async function logUsage(
+  feature: string,
+  model: string,
+  output: unknown,
+): Promise<void> {
+  try {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: profile } = await supabase
+      .from("users")
+      .select("org_id")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!profile?.org_id) return;
+    // Pull token counts off the output if Claude attached them in usage.
+    const usage = (output as { _usage?: { input_tokens?: number; output_tokens?: number } })._usage || {};
+    const inT = Number(usage.input_tokens || 0);
+    const outT = Number(usage.output_tokens || 0);
+    // Haiku 4.5 ≈ $1/M input, $5/M output (rough). cost in cents.
+    const cents = Math.round((inT * 0.0001 + outT * 0.0005) * 100) / 100;
+    await supabase.from("usage_log").insert({
+      org_id: profile.org_id,
+      user_id: user.id,
+      feature,
+      model,
+      input_tokens: inT,
+      output_tokens: outT,
+      cost_usd_cents: Math.round(cents),
+    });
+  } catch {
+    // never throw from a fire-and-forget logger
+  }
 }
