@@ -128,11 +128,16 @@ export async function GET(request: NextRequest) {
 // Keep the same shape as the previous Pixabay implementation so the client
 // component doesn't need to know about the swap.
 function formatTrack(t: JamendoTrack) {
+  // audioUrl points at our own /api/music/download/[id] proxy so the
+  // browser fetch isn't CORS-blocked by Jamendo's CDN. previewUrl stays
+  // direct because <audio> tag streaming has different CORS behavior than
+  // fetch(); preview playback works without proxying.
+  const id = parseInt(t.id, 10) || 0;
   return {
-    id: parseInt(t.id, 10) || 0,
+    id,
     title: t.name || "Untitled",
     duration: t.duration,
-    audioUrl: t.audiodownload || t.audio,
+    audioUrl: id ? `/api/music/download/${id}` : t.audiodownload || t.audio,
     previewUrl: t.audio,
     creator: t.artist_name || "Unknown",
     pageUrl: t.shareurl || "https://www.jamendo.com",
