@@ -255,8 +255,8 @@ export default function ReelMultiplier() {
             className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border-strong p-12 text-center transition hover:border-gold/60"
           >
             <Upload className="h-6 w-6 text-gold" />
-            <div className="font-display text-xl tracking-tight text-text">Drop a 30 to 90 second video</div>
-            <div className="text-sm text-muted">MP4, MOV, WEBM. Max 2 minutes. Max ~200&nbsp;MB.</div>
+            <div className="font-display text-xl tracking-tight text-text">Drop a 30 second to 3 minute video</div>
+            <div className="text-sm text-muted">MP4, MOV, WEBM. Up to 3 minutes, ~500 MB.</div>
             <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
           </div>
         )}
@@ -770,6 +770,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, musicFile, customLogo, musicB
             selectedId={pixabayTrackId}
             minDuration={20}
             maxDuration={120}
+            autoPick={true}
           />
           <p className="text-[10px] text-muted mt-2">
             Royalty-free CC-BY (commercial-OK with attribution). Drop credit in your video description: <em>Music: &quot;Track Name&quot; by Artist · jamendo.com</em>

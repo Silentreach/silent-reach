@@ -29,6 +29,8 @@ interface MusicBrowserProps {
   /** Suggested duration range for filtering — defaults to 20-120s */
   minDuration?: number;
   maxDuration?: number;
+  /** If true, auto-pick the first returned track when no track is yet selected. */
+  autoPick?: boolean;
 }
 
 export default function MusicBrowser({
@@ -37,6 +39,7 @@ export default function MusicBrowser({
   selectedId,
   minDuration = 20,
   maxDuration = 120,
+  autoPick = false,
 }: MusicBrowserProps) {
   const [query, setQuery] = useState(defaultQuery);
   const [tracks, setTracks] = useState<PixabayTrack[]>([]);
@@ -76,6 +79,10 @@ export default function MusicBrowser({
         }
       }
       setTracks(found);
+      if (autoPick && !selectedId && found.length > 0) {
+        // Fire-and-forget — the user can override by clicking another track's "Use"
+        selectTrack(found[0]).catch(() => undefined);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
     } finally {
