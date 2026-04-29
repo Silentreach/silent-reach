@@ -21,6 +21,7 @@ export default function PreProductionPage() {
   const [niche, setNiche] = useState<Niche | null>(null);
   const [output, setOutput] = useState<PreShootOutput | null>(null);
   const [legacyInputForHistory, setLegacyInputForHistory] = useState<PreShootInput | null>(null);
+  const [lastSubtitle, setLastSubtitle] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function pickNiche(n: Niche) {
@@ -95,6 +96,7 @@ export default function PreProductionPage() {
       if (!data.output) throw new Error("Empty response — please try again.");
 
       setOutput(data.output);
+      setLastSubtitle(buildSubtitle(inputs));
 
       // Stash a legacy-shaped input for the history widget (it knows that schema only).
       const legacy: PreShootInput = legacyShapeFor(inputs);
@@ -174,7 +176,7 @@ export default function PreProductionPage() {
               New brief
             </button>
           </div>
-          <BriefResult output={output} />
+          <BriefResult output={output} subtitle={lastSubtitle ?? undefined} />
         </div>
       )}
     </div>
@@ -273,4 +275,60 @@ function legacyShapeFor(inputs: NicheInputs): PreShootInput {
               inputs.platform === "all" ? "all" : "instagram",
     concept: inputs.concept,
   };
+}
+
+
+function buildSubtitle(inputs: NicheInputs): string {
+  if (inputs.niche === "real_estate") {
+    const stageLabels: Record<typeof inputs.listingStage, string> = {
+      coming_soon: "Coming Soon",
+      just_listed: "Just Listed",
+      open_house: "Open House",
+      price_improvement: "Price Improvement",
+      sold: "Sold",
+    };
+    const personaLabels: Record<string, string> = {
+      first_time: "First-Time",
+      move_up_family: "Move-Up Family",
+      downsizer: "Downsizer",
+      investor: "Investor",
+      out_of_province: "Out-of-Province",
+      luxury: "Luxury",
+    };
+    const personas = inputs.buyerPersonas.map((p) => personaLabels[p] ?? p).join(" + ");
+    return [inputs.address || "", stageLabels[inputs.listingStage], personas].filter(Boolean).join(" · ");
+  }
+  if (inputs.niche === "construction") {
+    const phaseLabels: Record<typeof inputs.projectPhase, string> = {
+      demo: "Demo",
+      framing: "Framing",
+      rough_in: "Rough-In",
+      drywall: "Drywall",
+      finish: "Finish",
+      final_reveal: "Final Reveal",
+    };
+    const arcLabels: Record<typeof inputs.transformationArc, string> = {
+      problem_solution: "Problem→Solution",
+      before_after: "Before→After",
+      process_hero: "Process Hero",
+      time_lapse: "Time-lapse",
+      trade_spotlight: "Trade Spotlight",
+    };
+    return [
+      "Construction",
+      phaseLabels[inputs.projectPhase],
+      arcLabels[inputs.transformationArc],
+      inputs.audienceMode === "trade_facing" ? "Trade-facing" : "Client-facing",
+    ].join(" · ");
+  }
+  // general
+  const modeLabels: Record<typeof inputs.contentMode, string> = {
+    day_in_the_life: "Day-in-the-Life",
+    explainer: "Explainer",
+    review: "Review",
+    tutorial: "Tutorial",
+    vlog: "Vlog",
+    hot_take: "Hot Take",
+  };
+  return modeLabels[inputs.contentMode];
 }

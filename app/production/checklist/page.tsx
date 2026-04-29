@@ -12,13 +12,26 @@ interface Shot {
   done: boolean;
 }
 
+interface FilmingNotes {
+  gear?: string;
+  lighting?: string;
+  timeOfDay?: string;
+  soundCapture?: string;
+  riskCalls?: string;
+}
+
 const STATE_KEY = "mintflow_checklist_state";
+const NOTES_KEY = "mintflow_checklist_notes";
 
 /* The page accepts a brief's shotList via the URL hash:
-   /production/checklist#data=<base64url(JSON.stringify({title, shots:[{timestamp, shot, retentionNote}]}))>
+   /production/checklist#data=<base64url(JSON.stringify({title, shots, filmingNotes?}))>
    This keeps it 100% client-side — no backend, works offline on a phone. */
 
-function decodeHash(): { title?: string; shots?: Omit<Shot, "id" | "done">[] } | null {
+function decodeHash(): {
+  title?: string;
+  shots?: Omit<Shot, "id" | "done">[];
+  filmingNotes?: FilmingNotes;
+} | null {
   if (typeof window === "undefined") return null;
   const h = window.location.hash;
   const m = h.match(/data=([A-Za-z0-9_\-]+)/);
@@ -49,6 +62,8 @@ function saveState(s: { title: string; shots: Shot[] }) {
 export default function ChecklistPage() {
   const [title, setTitle] = useState<string>("Today's shoot");
   const [shots, setShots] = useState<Shot[]>([]);
+  const [filmingNotes, setFilmingNotes] = useState<FilmingNotes | null>(null);
+  const [notesOpen, setNotesOpen] = useState<boolean>(false);
   const [loaded, setLoaded] = useState(false);
 
   // Hydrate: prefer hash data (fresh handoff from a brief) over saved state
@@ -68,9 +83,17 @@ export default function ChecklistPage() {
       setTitle(next.title);
       setShots(next.shots);
       saveState(next);
+      if (fromHash.filmingNotes) {
+        setFilmingNotes(fromHash.filmingNotes);
+        try { localStorage.setItem(NOTES_KEY, JSON.stringify(fromHash.filmingNotes)); } catch {}
+      }
     } else {
       const saved = loadState();
       if (saved) { setTitle(saved.title); setShots(saved.shots); }
+      try {
+        const raw = localStorage.getItem(NOTES_KEY);
+        if (raw) setFilmingNotes(JSON.parse(raw));
+      } catch {}
     }
     setLoaded(true);
   }, []);
@@ -131,6 +154,42 @@ export default function ChecklistPage() {
       </header>
 
       <div className="mx-auto max-w-2xl pt-6">
+        {filmingNotes && (
+          <div className="mb-4 rounded-xl border border-border/60 bg-bg-deep/30">
+            <button
+              type="button"
+              onClick={() => setNotesOpen((v) => !v)}
+              aria-expanded={notesOpen}
+              className="flex w-full items-center justify-between px-4 py-3 text-left"
+            >
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-gold/80">
+                <Sparkles className="h-3 w-3" />
+                Today\'s shoot notes
+              </div>
+              <span className={`text-muted transition-transform ${notesOpen ? "rotate-180" : ""}`}>▾</span>
+            </button>
+            {notesOpen && (
+              <div className="grid gap-2.5 border-t border-border/50 px-4 py-4 md:grid-cols-2">
+                {filmingNotes.gear && (
+                  <NoteRow label="Gear">{filmingNotes.gear}</NoteRow>
+                )}
+                {filmingNotes.lighting && (
+                  <NoteRow label="Lighting">{filmingNotes.lighting}</NoteRow>
+                )}
+                {filmingNotes.timeOfDay && (
+                  <NoteRow label="Time of day">{filmingNotes.timeOfDay}</NoteRow>
+                )}
+                {filmingNotes.soundCapture && (
+                  <NoteRow label="Sound">{filmingNotes.soundCapture}</NoteRow>
+                )}
+                {filmingNotes.riskCalls && (
+                  <NoteRow label="Risks">{filmingNotes.riskCalls}</NoteRow>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {shots.length === 0 ? (
           <EmptyState />
         ) : (
@@ -229,6 +288,15 @@ function EmptyState() {
           <Sparkles className="h-3.5 w-3.5" /> Generate a brief
         </Link>
       </div>
+    </div>
+  );
+}
+
+function NoteRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-bg p-3">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gold/80">{label}</div>
+      <div className="mt-1.5 text-[12.5px] leading-relaxed text-text/85">{children}</div>
     </div>
   );
 }
