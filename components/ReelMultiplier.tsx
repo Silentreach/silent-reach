@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getBrandKit } from "@/lib/userContext";
 import { renderReel, downloadBlob } from "@/lib/videoRender";
 import { computeSubjectZone, inferTransition, type SubjectZone, type TransitionType } from "@/lib/frameAnalysis";
+import { createReel } from "@/lib/db/reels";
 import MusicBrowser, { type PixabayTrack } from "@/components/MusicBrowser";
 import { transcodeWebMToMP4 } from "@/lib/transcoder";
 import { detectBPM, snapSegmentsToBeats } from "@/lib/audioAnalysis";
@@ -1033,6 +1034,18 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
         thumbUrl: freshThumbUrl,
         thumbName: freshThumbName,
       });
+
+      // Persist reel record to DB (fire-and-forget — don't block UI on failure).
+      // Outcome columns default to status='pending', so the Day-3 reminder
+      // banner will pick this up automatically once 72 hours pass.
+      createReel({
+        title: pkg.title || pkg.hookLine?.slice(0, 60) || `${pkg.platform} reel`,
+        duration_sec: editedCuts.reduce((acc, c) => acc + Math.max(0, c.endSec - c.startSec), 0),
+        content_type: "real_estate", // TODO: thread niche through from pre-shoot brief
+        packages_json: { platform: pkg.platform, hook: editedHook, cuts: editedCuts, musicTrackId: pixabayTrackId },
+        rendered_urls: { [pkg.platform]: newUrl },
+        status: "rendered",
+      }).catch(() => undefined);
     } catch (err: unknown) {
       setRenderError(err instanceof Error ? err.message : "Couldn’t render the reel.");
       setRenderState("error");

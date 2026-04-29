@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Day3Banner from "@/components/Day3Banner";
 import Link from "next/link";
 import { Sparkles, Clock, BookmarkCheck, TrendingUp, Mic, ArrowRight, Zap, Target } from "lucide-react";
 import { getHistory } from "@/lib/storage";
 import { getLibrary } from "@/lib/library";
 import { computeStats, getAllOutcomes, type Outcome } from "@/lib/outcomes";
+import { computeOutcomeStats } from "@/lib/db/outcomes";
 import { getVoiceSamples, getBrandKit } from "@/lib/userContext";
 import type { HistoryItem } from "@/types";
 
@@ -30,6 +32,11 @@ export default function DashboardPage() {
     setItems(getHistory());
     setOutcomes(getAllOutcomes());
     setStats(computeStats());
+    // Day 11: also fetch DB-backed stats — prefer those if they have data,
+    // fall back to legacy localStorage stats for unmigrated/anon users.
+    computeOutcomeStats().then((db) => {
+      if (db.total > 0) setStats(db);
+    }).catch(() => undefined);
     setLibrarySize(getLibrary().length);
     setVoiceCount(getVoiceSamples().length);
     setHasBrand(!!getBrandKit().name);
@@ -81,6 +88,11 @@ export default function DashboardPage() {
             What you shipped, what it saved you, and what your hooks actually traveled.
           </p>
         </div>
+      </section>
+
+      {/* Day-3 outcome reminder — only renders if there are pending reels */}
+      <section className="mx-auto max-w-5xl px-5 pt-6">
+        <Day3Banner />
       </section>
 
       {/* Stats grid */}
