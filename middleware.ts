@@ -17,17 +17,31 @@ import { updateSession } from "./lib/supabase/middleware";
 // /api/auth/request-magic-link can be called from the unauthenticated
 // login form. /api/admin/* is NOT here — admin routes self-gate via
 // super_admin check inside the route handler.
-const PUBLIC_ROUTES = [
+//
+// MARKETING SURFACE: home / about / pricing are public so first-time
+// visitors can read what Mintflow is, see the founder vision, and
+// pick a tier. The four product pillars (Pre-Production, Production,
+// Post-Production, Distribution) are gated — clicking them redirects
+// logged-out visitors to /login.
+const PUBLIC_ROUTES_EXACT = new Set([
+  "/",                // marketing home
+  "/about",           // founder vision
+  "/pricing",         // tiers + waitlist
+]);
+
+const PUBLIC_ROUTES_PREFIX = [
   "/login",
   "/auth/callback",
   "/auth/error",
   "/auth",            // catches any future /auth/* page
   "/invite",          // /invite/[code] — invite landing page
   "/api/auth",        // /api/auth/request-magic-link, /api/auth/signout, etc.
+  "/api/waitlist",    // pricing-page email capture (logged-out)
 ];
 
 function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  if (PUBLIC_ROUTES_EXACT.has(pathname)) return true;
+  return PUBLIC_ROUTES_PREFIX.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
 export async function middleware(request: NextRequest) {
