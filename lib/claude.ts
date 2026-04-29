@@ -119,12 +119,13 @@ type FrameWithMotion = ImageContent & {
   motionDelta?: number;
 };
 
+interface ClaudeCallResult { text: string; usage: { input_tokens: number; output_tokens: number }; model: string }
 async function callClaude(
   system: string,
   user: string,
   imageOrImages?: ImageContent | ImageContent[],
   modelOverride?: string
-): Promise<string> {
+): Promise<ClaudeCallResult> {
   const client = getClient();
   type ImageBlock = {
     type: "image";
@@ -155,7 +156,14 @@ async function callClaude(
   });
   const block = resp.content[0];
   if (block.type !== "text") throw new Error("Unexpected Claude response type");
-  return block.text;
+  return {
+    text: block.text,
+    usage: {
+      input_tokens: resp.usage?.input_tokens ?? 0,
+      output_tokens: resp.usage?.output_tokens ?? 0,
+    },
+    model: resp.model || (modelOverride || MODEL),
+  };
 }
 
 export async function generatePreShoot(
@@ -169,7 +177,8 @@ export async function generatePreShoot(
   // pushing Sonnet past the 55s SDK budget. Haiku is ~2x faster, sufficient quality
   // for structured-schema generation. Switch back to MODEL (Sonnet) if quality drops.
   void t0;
-  const raw = await callClaude(system, user, undefined, MODEL_FAST);
+  const callRes = await callClaude(system, user, undefined, MODEL_FAST);
+  const raw = callRes.text;
   const json = extractJson(raw);
 
   // Try strict parse first
@@ -221,7 +230,8 @@ export async function generatePostUpload(
   ctx?: UserContext
 ): Promise<PostUploadOutput> {
   const { system, user } = buildPostUploadPrompt(meta, transcript, overrides, ctx);
-  const raw = await callClaude(system, user, thumbnailImage);
+  const callRes = await callClaude(system, user, thumbnailImage);
+  const raw = callRes.text;
   const json = extractJson(raw);
   return PostUploadOutputSchema.parse(json) as PostUploadOutput;
 }
@@ -294,14 +304,15 @@ export async function generateReelMultiplier(
   const visionFrames: ImageContent[] = frames.map((f) => ({ mediaType: f.mediaType, data: f.data }));
   // Reel Multiplier uses Haiku (2x faster than Sonnet) — the schema is well-defined
   // and the synthesis task is forgiving. Switch to MODEL (Sonnet) here if quality drops.
-  const raw = await callClaude(system, user, visionFrames, MODEL_FAST);
+  const callRes = await callClaude(system, user, visionFrames, MODEL_FAST);
+  const raw = callRes.text;
   const json = extractJson(raw);
   const parsed = ReelMultiplierOutputSchema.safeParse(json);
-  if (parsed.success) return parsed.data as ReelMultiplierOutput;
+  if (parsed.success) return Object.assign(parsed.data, { _usage: callRes.usage, _model: callRes.model }) as ReelMultiplierOutput;
   // No auto-repair (richer call already eats most of our 60s budget). Backfill fixes light cases.
   const filled = backfillReelMultiplier(json as Record<string, unknown>, input);
   const second = ReelMultiplierOutputSchema.safeParse(filled);
-  if (second.success) return second.data as ReelMultiplierOutput;
+  if (second.success) return Object.assign(second.data, { _usage: callRes.usage, _model: callRes.model }) as ReelMultiplierOutput;
   throw new Error("The reel generator returned an output we couldn\u2019t fully parse. Please try again.");
 }
 

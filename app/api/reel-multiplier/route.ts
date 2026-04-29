@@ -79,15 +79,15 @@ export async function POST(req: NextRequest) {
       const broken = output.packages.find((p) => !p.cutMarkers?.length);
       if (broken) {
         return NextResponse.json(
-          { error: "AI returned cuts that didn\'t fit your source video. Please try again — usually a one-time hiccup." },
+          { error: "AI returned cuts that didn't fit your source video. Please try again — usually a one-time hiccup." },
           { status: 422 }
         );
       }
     }
 
     // Fire-and-forget usage log: tracks Anthropic spend per org for billing
-    // and rate-limit decisions later. Don\'t block the response.
-    logUsage("reel_multiplier", "claude-haiku-4-5", output).catch(() => undefined);
+    // and rate-limit decisions later. Don't block the response.
+    logUsage("reel_multiplier", (output as any)._model || "claude-haiku-4-5", output).catch(() => undefined);
 
     return NextResponse.json({ output });
   } catch (err: unknown) {

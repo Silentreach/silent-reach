@@ -18,7 +18,7 @@ export interface Segment {
   /** 0-1 vertical subject center. Default 0.5. */
   cropBiasY?: number;
   /** Which transition to play when entering this segment. Default "dip". */
-  transitionIn?: "dip" | "whip" | "crossfade";
+  transitionIn?: "dip"; // whip/crossfade not yet implemented — single-source-of-truth here
 }
 export type OutputAspect = "9:16" | "1:1" | "16:9";
 export type HookPosition = "top" | "bottom" | "auto";

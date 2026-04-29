@@ -223,6 +223,22 @@ interface ThumbDesignSpec {
   brandName?: string;
 }
 
+
+// Ensure the luxury fonts are loaded BEFORE drawing to canvas. Without this,
+// the canvas falls back to Georgia silently, killing the Sotheby's-tier feel.
+async function ensureLuxeFontsLoaded(): Promise<void> {
+  if (typeof document === "undefined" || !document.fonts) return;
+  try {
+    await Promise.all([
+      document.fonts.load("500 92px 'Cormorant Garamond'"),
+      document.fonts.load("700 92px 'Playfair Display'"),
+      document.fonts.load("600 22px 'Inter'"),
+    ]);
+  } catch {
+    // fonts may already be loaded or fail silently — that's fine
+  }
+}
+
 function drawDesignedThumb(canvas: HTMLCanvasElement, spec: ThumbDesignSpec) {
   const W = canvas.width;
   const H = canvas.height;
@@ -392,6 +408,7 @@ async function renderDesignedThumbnail(
     const c = document.createElement("canvas");
     c.width = W;
     c.height = H;
+    await ensureLuxeFontsLoaded();
     drawDesignedThumb(c, { videoOrImage: v, timestampSec, overlayText, reason, brandName });
 
     return await new Promise<Blob>((res, rej) =>
@@ -1383,7 +1400,8 @@ function DesignedThumbPreview({
         v.currentTime = Math.max(0, Math.min(v.duration - 0.05, timestampSec));
         await new Promise<void>((resolve) => { v.onseeked = () => resolve(); });
         if (cancelled || !canvasRef.current) return;
-        // Render at half resolution to keep the page lightweight (still 540x960).
+        await ensureLuxeFontsLoaded();
+        if (cancelled || !canvasRef.current) return;
         canvasRef.current.width = 540;
         canvasRef.current.height = 960;
         drawDesignedThumb(canvasRef.current, { videoOrImage: v, timestampSec, overlayText, reason, brandName });

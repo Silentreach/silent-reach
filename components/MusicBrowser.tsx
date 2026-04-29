@@ -1,9 +1,9 @@
 "use client";
 
-// Pixabay music browser embedded inside a Reel Multiplier package card.
-// User searches royalty-free music, previews tracks, picks one — selected
-// track is downloaded as a Blob and handed back to the parent so the
-// renderer uses it as the music bed.
+// Music browser (Jamendo-backed) embedded inside a Reel Multiplier package card.
+// User searches royalty-free CC-BY music (Jamendo), previews tracks, picks one —
+// selected track is downloaded as a Blob and handed back to the parent
+// so the renderer uses it as the music bed.
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Music, Play, Pause, Check, ExternalLink, Search } from "lucide-react";
@@ -202,7 +202,7 @@ export default function MusicBrowser({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ml-1 inline-flex items-center text-mint/70 hover:text-mint"
-                    aria-label="Pixabay page"
+                    aria-label="Track page on Jamendo"
                   >
                     <ExternalLink className="h-2.5 w-2.5" />
                   </a>
