@@ -521,6 +521,12 @@ export default function ReelMultiplier() {
 
   return (
     <div className="space-y-8">
+      {audioRoutingWarning && (
+        <div className="mb-3 rounded-lg border border-amber-700/50 bg-amber-950/30 p-3 text-xs text-amber-200">
+          <strong>Audio:</strong> {audioRoutingWarning}
+          <button onClick={() => setAudioRoutingWarning(null)} className="ml-3 text-muted hover:text-text">dismiss</button>
+        </div>
+      )}
       {/* Upload card */}
       <div className="rounded-2xl border border-border bg-surface p-6">
         {!file && (
@@ -692,12 +698,7 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
             <strong>iOS Safari note:</strong> Reel rendering is unreliable on iPhone/iPad Safari. For best results use desktop Chrome, desktop Safari 17+, or Edge. iOS Chrome works the same as Safari.
           </div>
         )}
-        {audioRoutingWarning && (
-          <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-3 text-xs text-amber-200">
-            <strong>Audio:</strong> {audioRoutingWarning}
-            <button onClick={() => setAudioRoutingWarning(null)} className="ml-2 text-muted hover:text-text">dismiss</button>
-          </div>
-        )}
+
 
       {/* Platform tabs */}
       <div className="flex flex-wrap gap-2">
