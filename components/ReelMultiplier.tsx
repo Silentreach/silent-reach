@@ -223,6 +223,7 @@ interface ThumbDesignSpec {
   overlayText: string;
   reason?: string;
   brandName?: string;
+  template?: number; // 0=editorial, 1=minimal, 2=cinematic-stack — varies per moment index
 }
 
 
@@ -252,39 +253,19 @@ function drawDesignedThumb(canvas: HTMLCanvasElement, spec: ThumbDesignSpec) {
   const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || 1920;
   const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || 1080;
 
-  // 1. Center-crop to canvas aspect.
+  // Center-crop to canvas aspect.
   const targetAspect = W / H;
   const sourceAspect = sw / sh;
   let sx = 0, sy = 0, scw = sw, sch = sh;
-  if (sourceAspect > targetAspect) {
-    scw = sh * targetAspect;
-    sx = (sw - scw) / 2;
-  } else if (sourceAspect < targetAspect) {
-    sch = sw / targetAspect;
-    sy = (sh - sch) / 2;
-  }
+  if (sourceAspect > targetAspect) { scw = sh * targetAspect; sx = (sw - scw) / 2; }
+  else if (sourceAspect < targetAspect) { sch = sw / targetAspect; sy = (sh - sch) / 2; }
 
-  // 2. Cinematic color grade — subtle saturation + contrast bump + slight warm shift.
+  // Color grade.
   ctx.filter = "saturate(115%) contrast(108%) brightness(101%)";
   ctx.drawImage(src, sx, sy, scw, sch, 0, 0, W, H);
   ctx.filter = "none";
 
-  // 3. Bottom-half soft dark gradient for legibility — starts higher (60% from top).
-  const grad = ctx.createLinearGradient(0, H * 0.45, 0, H);
-  grad.addColorStop(0,   "rgba(0,0,0,0)");
-  grad.addColorStop(0.45,"rgba(0,0,0,0.30)");
-  grad.addColorStop(1,   "rgba(0,0,0,0.85)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, H * 0.45, W, H * 0.55);
-
-  // 4. Top-edge soft fade for brand wordmark legibility.
-  const topGrad = ctx.createLinearGradient(0, 0, 0, H * 0.18);
-  topGrad.addColorStop(0, "rgba(0,0,0,0.45)");
-  topGrad.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = topGrad;
-  ctx.fillRect(0, 0, W, H * 0.18);
-
-  // 5. Cinematic radial vignette (cool tint at edges).
+  // Cinematic radial vignette (always).
   const cx = W / 2, cy = H / 2, r = Math.hypot(cx, cy);
   const vGrad = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r);
   vGrad.addColorStop(0, "rgba(0,0,0,0)");
@@ -292,66 +273,189 @@ function drawDesignedThumb(canvas: HTMLCanvasElement, spec: ThumbDesignSpec) {
   ctx.fillStyle = vGrad;
   ctx.fillRect(0, 0, W, H);
 
-  // 6. TYPOGRAPHY block, anchored bottom-left with 8% margin.
+  const headline = toTitleCase((spec.overlayText || "").trim());
+  if (!headline) return;
+
+  // Brand name ONLY if user explicitly set one in /settings/brand-kit.
+  // No "Mintflow" leak. Realtor's thumbnail = realtor's branding.
+  const brand = (spec.brandName || "").trim();
+
+  // Route by template index — three genuinely distinct typographic systems.
+  const tpl = spec.template ?? 0;
+  if (tpl === 1)      drawTemplateMinimal(ctx, W, H, headline, brand);
+  else if (tpl === 2) drawTemplateCinematicStack(ctx, W, H, headline, brand);
+  else                drawTemplateEditorial(ctx, W, H, headline, brand);
+}
+
+/* ───────── Template A — Editorial (Sotheby's listing) ─────────
+   Tall thin Cormorant serif, bottom-left, gold accent line, small caps tagline.
+   Best for: clean exterior shots, hero detail moments. */
+function drawTemplateEditorial(ctx: CanvasRenderingContext2D, W: number, H: number, headline: string, brand: string) {
+  // Bottom gradient.
+  const grad = ctx.createLinearGradient(0, H * 0.45, 0, H);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(0.45, "rgba(0,0,0,0.30)");
+  grad.addColorStop(1, "rgba(0,0,0,0.85)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, H * 0.45, W, H * 0.55);
+
   const sidePad = Math.round(W * 0.075);
   const bottomPad = Math.round(H * 0.075);
   const maxWidth = W - sidePad * 2;
+  const fontFamily = "'Cormorant Garamond', 'Playfair Display', 'Didot', Georgia, serif";
 
-  // Headline: title-case from overlayText, rendered in tall thin serif.
-  const headlineRaw = (spec.overlayText || "").trim();
-  const headline = toTitleCase(headlineRaw);
+  let fontSize = Math.round(W * 0.085);
+  ctx.font = `500 ${fontSize}px ${fontFamily}`;
+  let lines = wrapText(ctx, headline, maxWidth);
+  if (lines.length > 2) {
+    fontSize = Math.round(W * 0.062);
+    ctx.font = `500 ${fontSize}px ${fontFamily}`;
+    lines = wrapText(ctx, headline, maxWidth);
+  }
+  const lineHeight = Math.round(fontSize * 1.05);
+  const subtitleH = Math.round(W * 0.022);
+  const accentLineH = 6;
+  const blockH = lines.length * lineHeight + 26 + accentLineH + (brand ? 18 + subtitleH : 0);
+  let y = H - bottomPad - blockH + lineHeight;
 
-  if (headline) {
-    // Pick font size by edge length so longer headlines shrink gracefully.
-    const fontFamily = "'Cormorant Garamond', 'Playfair Display', 'Didot', 'Bodoni 72', Georgia, serif";
-    let fontSize = Math.round(W * 0.085);  // ~92px on 1080W
-    let weight = 500;  // medium — feels luxe vs heavy bold
-    ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
-    let lines = wrapText(ctx, headline, maxWidth);
-    if (lines.length > 2) {
-      fontSize = Math.round(W * 0.062);  // ~67px
-      ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
-      lines = wrapText(ctx, headline, maxWidth);
-    }
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = "#F5EFE7";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  for (const line of lines) {
+    ctx.fillText(line, sidePad, y);
+    y += lineHeight;
+  }
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
 
-    const lineHeight = Math.round(fontSize * 1.05);
+  const accentY = y - lineHeight + 12;
+  ctx.fillStyle = "#D4AF37";
+  ctx.fillRect(sidePad, accentY, Math.round(W * 0.10), accentLineH);
 
-    // Position: total block height = lines + accent line + small subtle subtitle.
-    const headlineH = lines.length * lineHeight;
-    const subtitleH = Math.round(W * 0.022);
-    const accentLineH = 6;
-    const blockH = headlineH + 26 + accentLineH + 18 + subtitleH;
-    let y = H - bottomPad - blockH + lineHeight; // first baseline
-
-    // Soft drop shadow for legibility (instead of stroke which looks chunky).
-    ctx.shadowColor = "rgba(0,0,0,0.55)";
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 3;
-    ctx.fillStyle = "#F5EFE7"; // off-white, warm
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
-    for (const line of lines) {
-      ctx.fillText(line, sidePad, y);
-      y += lineHeight;
-    }
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-
-    // Thin gold accent line under headline.
-    const accentY = y - lineHeight + 12;
-    ctx.fillStyle = "#D4AF37";
-    ctx.fillRect(sidePad, accentY, Math.round(W * 0.10), accentLineH);
-
-    // Small uppercase subtitle/tagline below the accent line.
-    // If brand name + reason fits, prefer it; else fallback.
-    const tagline = (spec.brandName || "Mintflow").toUpperCase();
+  if (brand) {
     ctx.font = `600 ${subtitleH}px ui-sans-serif, system-ui, sans-serif`;
     ctx.fillStyle = "rgba(212,175,55,0.95)";
     ctx.textBaseline = "top";
-    const taglineY = accentY + accentLineH + 16;
-    // Letterspaced effect via per-char draw.
-    drawLetterspaced(ctx, tagline, sidePad, taglineY, Math.round(subtitleH * 0.16));
+    drawLetterspaced(ctx, brand.toUpperCase(), sidePad, accentY + accentLineH + 16, Math.round(subtitleH * 0.16));
   }
+}
+
+/* ───────── Template B — Minimal (centered display) ─────────
+   Big Playfair Display Black, centered, no accent line, no tagline.
+   Best for: scenic vistas, big skies, abstract beauty shots. */
+function drawTemplateMinimal(ctx: CanvasRenderingContext2D, W: number, H: number, headline: string, brand: string) {
+  // Subtle full-frame dim for legibility.
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.fillRect(0, 0, W, H);
+
+  const sidePad = Math.round(W * 0.10);
+  const maxWidth = W - sidePad * 2;
+  const fontFamily = "'Playfair Display', 'Didot', 'Cormorant Garamond', Georgia, serif";
+
+  let fontSize = Math.round(W * 0.105);
+  ctx.font = `900 ${fontSize}px ${fontFamily}`;
+  let lines = wrapText(ctx, headline, maxWidth);
+  if (lines.length > 2) {
+    fontSize = Math.round(W * 0.078);
+    ctx.font = `900 ${fontSize}px ${fontFamily}`;
+    lines = wrapText(ctx, headline, maxWidth);
+  }
+  const lineHeight = Math.round(fontSize * 1.08);
+  const totalH = lines.length * lineHeight;
+
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = "#FFFFFF";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  let y = H / 2 - totalH / 2 + lineHeight;
+  for (const line of lines) {
+    ctx.fillText(line, W / 2, y);
+    y += lineHeight;
+  }
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+
+  if (brand) {
+    const tagH = Math.round(W * 0.018);
+    ctx.font = `500 ${tagH}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.textBaseline = "alphabetic";
+    drawLetterspaced(ctx, brand.toUpperCase(), W / 2 - measureLetterspaced(ctx, brand.toUpperCase(), Math.round(tagH * 0.25)) / 2, H - Math.round(H * 0.06), Math.round(tagH * 0.25));
+  }
+}
+
+/* ───────── Template C — Cinematic Stack (compass / Christie's) ─────────
+   Thin uppercase eyebrow on top, bold serif headline below, framed by a
+   thin gold rule. Anchored bottom-left.
+   Best for: architectural reveals, urban scenes, listings with character. */
+function drawTemplateCinematicStack(ctx: CanvasRenderingContext2D, W: number, H: number, headline: string, brand: string) {
+  // Bottom gradient — slightly lighter than editorial template.
+  const grad = ctx.createLinearGradient(0, H * 0.40, 0, H);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(1, "rgba(0,0,0,0.78)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, H * 0.40, W, H * 0.60);
+
+  const sidePad = Math.round(W * 0.075);
+  const bottomPad = Math.round(H * 0.085);
+  const maxWidth = W - sidePad * 2;
+  const fontFamily = "'Playfair Display', 'Cormorant Garamond', 'Didot', Georgia, serif";
+
+  // Eyebrow tagline (above the headline).
+  const eyebrow = brand ? brand.toUpperCase() : "FEATURED";
+  const eyebrowH = Math.round(W * 0.020);
+  ctx.font = `700 ${eyebrowH}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.fillStyle = "#D4AF37";
+
+  let fontSize = Math.round(W * 0.092);
+  ctx.font = `700 ${fontSize}px ${fontFamily}`;
+  let lines = wrapText(ctx, headline, maxWidth);
+  if (lines.length > 2) {
+    fontSize = Math.round(W * 0.07);
+    ctx.font = `700 ${fontSize}px ${fontFamily}`;
+    lines = wrapText(ctx, headline, maxWidth);
+  }
+
+  const lineHeight = Math.round(fontSize * 1.04);
+  const blockH = eyebrowH + 14 + lines.length * lineHeight + 22;
+  let y = H - bottomPad - blockH;
+
+  // Top thin gold rule above the eyebrow.
+  ctx.fillStyle = "#D4AF37";
+  ctx.fillRect(sidePad, y, Math.round(W * 0.18), 2);
+  y += 18;
+
+  // Eyebrow.
+  ctx.font = `700 ${eyebrowH}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.fillStyle = "#D4AF37";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  drawLetterspaced(ctx, eyebrow, sidePad, y + eyebrowH, Math.round(eyebrowH * 0.20));
+  y += eyebrowH + 18;
+
+  // Headline.
+  ctx.font = `700 ${fontSize}px ${fontFamily}`;
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = "#F5EFE7";
+  for (const line of lines) {
+    y += lineHeight - 6;
+    ctx.fillText(line, sidePad, y);
+  }
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+}
+
+function measureLetterspaced(ctx: CanvasRenderingContext2D, text: string, spacing: number): number {
+  let w = 0;
+  for (const ch of text) w += ctx.measureText(ch).width + spacing;
+  return w - spacing;
 }
 
 function toTitleCase(s: string): string {
@@ -392,6 +496,7 @@ async function renderDesignedThumbnail(
   overlayText: string,
   brandName?: string,
   reason?: string,
+  template: number = 0,
 ): Promise<Blob> {
   const url = URL.createObjectURL(file);
   try {
@@ -411,7 +516,7 @@ async function renderDesignedThumbnail(
     c.width = W;
     c.height = H;
     await ensureLuxeFontsLoaded();
-    drawDesignedThumb(c, { videoOrImage: v, timestampSec, overlayText, reason, brandName });
+    drawDesignedThumb(c, { videoOrImage: v, timestampSec, overlayText, reason, brandName, template });
 
     return await new Promise<Blob>((res, rej) =>
       c.toBlob((b) => (b ? res(b) : rej(new Error("toBlob failed"))), "image/jpeg", 0.94)
@@ -1405,7 +1510,8 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                   timestampSec={m.timestampSec}
                   overlayText={m.overlayText}
                   reason={m.reason}
-                  brandName={getBrandKit().name}
+                  brandName={brandKit.name}
+                  template={i}
                 />
               </div>
               <div className="mt-2 flex items-center justify-between gap-2">
@@ -1413,7 +1519,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                   onClick={async () => {
                     if (!sourceFile) return;
                     try {
-                      const blob = await renderDesignedThumbnail(sourceFile, m.timestampSec, m.overlayText, getBrandKit().name);
+                      const blob = await renderDesignedThumbnail(sourceFile, m.timestampSec, m.overlayText, brandKit.name, m.reason, i);
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement("a");
                       a.href = url;
@@ -1475,12 +1581,14 @@ function DesignedThumbPreview({
   overlayText,
   reason,
   brandName,
+  template = 0,
 }: {
   sourceFile: File | null;
   timestampSec: number;
   overlayText: string;
   reason?: string;
   brandName?: string;
+  template?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
@@ -1506,7 +1614,7 @@ function DesignedThumbPreview({
         if (cancelled || !canvasRef.current) return;
         canvasRef.current.width = 540;
         canvasRef.current.height = 960;
-        drawDesignedThumb(canvasRef.current, { videoOrImage: v, timestampSec, overlayText, reason, brandName });
+        drawDesignedThumb(canvasRef.current, { videoOrImage: v, timestampSec, overlayText, reason, brandName, template });
         setReady(true);
       } catch {
         // ignore
@@ -1515,7 +1623,7 @@ function DesignedThumbPreview({
       }
     })();
     return () => { cancelled = true; URL.revokeObjectURL(url); };
-  }, [sourceFile, timestampSec, overlayText, brandName]);
+  }, [sourceFile, timestampSec, overlayText, brandName, template]);
 
   return (
     <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-bg-deep">
