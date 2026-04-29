@@ -903,6 +903,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
   // User-editable overrides — generator → tool. Default to AI's suggestions.
   const [editedHook, setEditedHook] = useState<string>(pkg.hookLine);
   const brandKit = useMemo(() => getBrandKit(), []); // P6: don't run every keystroke
+  const [musicResetCount, setMusicResetCount] = useState(0); // bumps to remount MusicBrowser → fresh auto-pick
   const [cutsExpanded, setCutsExpanded] = useState(false);
   const [editedCuts, setEditedCuts] = useState<{ startSec: number; endSec: number; reason?: string }[]>(
     pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec, reason: c.reason }))
@@ -1045,7 +1046,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
           <div className="flex-1">
             <div className="text-[11px] uppercase tracking-widest text-gold/85"><Download className="mr-1 inline h-3 w-3" /> Render preview</div>
             <div className="mt-1 font-display text-lg tracking-tight text-text">
-              {editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM · ${beatSnapsApplied} cut${beatSnapsApplied === 1 ? "" : "s"} snapped to beat` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
+              {musicResetCount > 0 && !musicFile ? "Re-rolling music… " : ""}{editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM · ${beatSnapsApplied} cut${beatSnapsApplied === 1 ? "" : "s"} snapped to beat` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
             </div>
             
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
@@ -1073,7 +1074,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
           </div>
           <button
             onClick={onRender}
-            disabled={renderState === "rendering" || !sourceFile || editedCuts.length === 0 || !editedHook.trim()}
+            disabled={renderState === "rendering" || !sourceFile || editedCuts.length === 0 || !editedHook.trim() || (musicResetCount > 0 && !musicFile)}
             className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60"
           >
             {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> {renderPhase === "convert" ? "Converting" : stageLabel(renderStage)} {(renderPct * 100).toFixed(0)}%</>}
@@ -1155,11 +1156,14 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                     setRenderState("idle");
 
                     // Reset music — MusicBrowser autoPick will randomize from
-                    // top 4 search results (different track each time).
+                    // top 4 search results (different track each time). Bump
+                    // musicResetCount → MusicBrowser remounts → useEffect runs
+                    // doSearch → autoPick fires for a fresh track.
                     setMusicFile(null);
                     setMusicBPM(null);
                     setPixabayTrackId(null);
                     onTrackPicked(null);
+                    setMusicResetCount((c) => c + 1);
 
                     // Re-shuffle cut times by ±0.3s within their original range
                     // so the next render has visibly different in/out points
@@ -1232,6 +1236,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             </div>
           )}
           <MusicBrowser
+            key={musicResetCount}
             defaultQuery={buildPlatformMusicQuery(pkg)}
             onSelect={onPickMusic}
             selectedId={pixabayTrackId}
