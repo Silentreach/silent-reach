@@ -553,6 +553,7 @@ export default function ReelMultiplier() {
   }, []);
   const [description, setDescription] = useState<string>("");
   const [series, setSeries] = useState<string>("");
+  const [contentType, setContentType] = useState<"real_estate" | "construction" | "general">("real_estate");
   const [stage, setStage] = useState<"idle" | "extracting" | "thinking" | "done" | "error">("idle");
 
   // M3: Rotate AI-thinking copy so users don't stare at a static spinner.
@@ -622,7 +623,7 @@ export default function ReelMultiplier() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          input: { sourceDurationSec: durationSec, description: description || undefined, series: series || undefined, frames },
+          input: { sourceDurationSec: durationSec, description: description || undefined, series: series || undefined, contentType, frames },
           userContext: getUserContext(),
         }),
         signal: ctrl.signal,
@@ -640,6 +641,7 @@ export default function ReelMultiplier() {
       setOutput(data.output); setStage("done");
       generateLockRef.current = false;
     } catch (err: unknown) {
+      generateLockRef.current = false;
       const msg = err instanceof Error ? err.message : "Unknown error";
       setError(msg); setStage("error");
     }
@@ -694,6 +696,21 @@ export default function ReelMultiplier() {
 
             <Field label="Series / project (optional)">
               <input type="text" value={series} onChange={(e) => setSeries(e.target.value)} placeholder="e.g. 868 Orono Avenue" />
+            </Field>
+
+            <Field label="Niche (tunes prompt + cut hierarchy)">
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { id: "real_estate" as const, label: "BC Real Estate" },
+                  { id: "construction" as const, label: "Construction / Reno" },
+                  { id: "general" as const, label: "General" },
+                ]).map(opt => (
+                  <button key={opt.id} type="button" onClick={() => setContentType(opt.id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${contentType === opt.id ? "bg-gold text-bg" : "border border-border text-muted hover:text-text"}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </Field>
 
             {/* Brand logo for the rendered output — music is now per-platform inside each reel card */}
@@ -780,7 +797,7 @@ export default function ReelMultiplier() {
       )}
 
       {/* Result */}
-      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} customLogo={customLogo} extractedFrames={extractedFrames} />}
+      {output && <ReelResults output={output} sourceUrl={previewUrl} sourceFile={file} customLogo={customLogo} extractedFrames={extractedFrames} contentType={contentType} />}
     </div>
   );
 }
@@ -802,7 +819,7 @@ const PLATFORM_META: Record<ReelPlatform, { label: string; icon: typeof Instagra
   facebook_reel:  { label: "Facebook Reel",  icon: Facebook,  color: "from-blue-500/30 to-sky-500/30" },
 };
 
-function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrames }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[] }) {
+function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrames, contentType }: { output: ReelMultiplierOutput; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; contentType: "real_estate" | "construction" | "general" }) {
   // Per-platform rendered previews so the user can render IG + YT both, see them
   // side-by-side in the gallery, and pick a winner without losing the other.
   const [renderedByPlatform, setRenderedByPlatform] = useState<Record<string, RenderedPreview>>({});
@@ -925,7 +942,7 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
         </div>
       )}
 
-      {pkg && <PackageCard pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} customLogo={customLogo} extractedFrames={extractedFrames} onPreviewReady={onPreviewReady} excludeMusicIds={usedIds.filter(id => id !== musicIdByPlatform[pkg.platform])} onTrackPicked={(id) => onTrackPicked(pkg.platform, id)} stillInGallery={pkg.platform in renderedByPlatform} />}
+      {pkg && <PackageCard key={pkg.platform} pkg={pkg} sourceUrl={sourceUrl} sourceFile={sourceFile} customLogo={customLogo} extractedFrames={extractedFrames} onPreviewReady={onPreviewReady} excludeMusicIds={usedIds.filter(id => id !== musicIdByPlatform[pkg.platform])} onTrackPicked={(id) => onTrackPicked(pkg.platform, id)} stillInGallery={pkg.platform in renderedByPlatform} contentType={contentType} />}
 
     </div>
   );
@@ -955,7 +972,7 @@ function buildPlatformMusicQuery(pkg: ReelPackage): string {
   return `${platformTag} ${base}`;
 }
 
-function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, onPreviewReady, excludeMusicIds, onTrackPicked, stillInGallery }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; onPreviewReady: (platform: string, info: RenderedPreview) => void; excludeMusicIds: number[]; onTrackPicked: (id: number | null) => void; stillInGallery: boolean }) {
+function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, onPreviewReady, excludeMusicIds, onTrackPicked, stillInGallery, contentType }: { pkg: ReelPackage; sourceUrl: string | null; sourceFile: File | null; customLogo: {kind: "image" | "video"; url: string} | null; extractedFrames: ExtractedFrame[]; onPreviewReady: (platform: string, info: RenderedPreview) => void; excludeMusicIds: number[]; onTrackPicked: (id: number | null) => void; stillInGallery: boolean; contentType: "real_estate" | "construction" | "general" }) {
   // Per-platform music state — each platform tab keeps its own track so the
   // user can render IG with one mood and YT with a different mood and compare.
   const [musicFile, setMusicFile] = useState<File | null>(null);
@@ -1146,7 +1163,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
       createReel({
         title: pkg.title || pkg.hookLine?.slice(0, 60) || `${pkg.platform} reel`,
         duration_sec: editedCuts.reduce((acc, c) => acc + Math.max(0, c.endSec - c.startSec), 0),
-        content_type: "real_estate", // TODO: thread niche through from pre-shoot brief
+        content_type: contentType,
         packages_json: { platform: pkg.platform, hook: editedHook, cuts: editedCuts, musicTrackId: pixabayTrackId },
         rendered_urls: { [pkg.platform]: newUrl },
         status: "rendered",

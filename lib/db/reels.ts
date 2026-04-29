@@ -56,7 +56,7 @@ export async function createReel(input: CreateReelInput): Promise<ReelRow | null
       title: input.title || null,
       source_video_url: input.source_video_url || null,
       duration_sec: input.duration_sec || null,
-      content_type: input.content_type || "real_estate",
+      content_type: input.content_type || null,
       packages_json: input.packages_json || null,
       rendered_urls: input.rendered_urls || null,
       status: input.status || "rendered",
