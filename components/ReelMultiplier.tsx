@@ -904,6 +904,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
   const [editedHook, setEditedHook] = useState<string>(pkg.hookLine);
   const brandKit = useMemo(() => getBrandKit(), []); // P6: don't run every keystroke
   const [musicResetCount, setMusicResetCount] = useState(0); // bumps to remount MusicBrowser → fresh auto-pick
+  const [previousTrackIds, setPreviousTrackIds] = useState<number[]>([]); // tracks ALREADY picked on this platform — exclude them on re-roll
   const [cutsExpanded, setCutsExpanded] = useState(false);
   const [editedCuts, setEditedCuts] = useState<{ startSec: number; endSec: number; reason?: string }[]>(
     pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec, reason: c.reason }))
@@ -1159,6 +1160,9 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                     // top 4 search results (different track each time). Bump
                     // musicResetCount → MusicBrowser remounts → useEffect runs
                     // doSearch → autoPick fires for a fresh track.
+                    if (pixabayTrackId) {
+                      setPreviousTrackIds((prev) => [...prev, pixabayTrackId]);
+                    }
                     setMusicFile(null);
                     setMusicBPM(null);
                     setPixabayTrackId(null);
@@ -1243,7 +1247,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             minDuration={20}
             maxDuration={600}
             autoPick={true}
-            excludeIds={excludeMusicIds}
+            excludeIds={[...excludeMusicIds, ...previousTrackIds]}
           />
           <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted">
             <span>CC-BY · commercial-OK with credit in caption.</span>
