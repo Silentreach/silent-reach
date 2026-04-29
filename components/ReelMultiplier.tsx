@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getBrandKit } from "@/lib/userContext";
 import { renderReel, downloadBlob } from "@/lib/videoRender";
 import { computeSubjectZone, inferTransition, type SubjectZone, type TransitionType } from "@/lib/frameAnalysis";
@@ -39,7 +39,7 @@ interface ExtractedFrame { data: string; mediaType: "image/jpeg"; timestampSec: 
  * canvas pixel-diff. Motion delta tells the AI which frames are visually dynamic
  * (probable highlights / camera moves) vs static (probable B-roll filler).
  */
-async function extractFramesFromFile(file: File): Promise<{ frames: ExtractedFrame[]; durationSec: number }> {
+async function extractFramesFromFile(file: File, onProgress?: (done: number, total: number) => void): Promise<{ frames: ExtractedFrame[]; durationSec: number }> {
   const url = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
@@ -72,6 +72,7 @@ async function extractFramesFromFile(file: File): Promise<{ frames: ExtractedFra
 
     const rawFrames: { data: string; timestampSec: number; pixels: Uint8ClampedArray }[] = [];
     for (let i = 0; i < FRAME_COUNT; i++) {
+      onProgress?.(i, FRAME_COUNT);
       const t = (duration / (FRAME_COUNT + 1)) * (i + 1);
       video.currentTime = t;
       await new Promise<void>((res) => { video.onseeked = () => res(); });
@@ -433,6 +434,8 @@ export default function ReelMultiplier() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number>(0);
   const [audioRoutingWarning, setAudioRoutingWarning] = useState<string | null>(null);
+  const [extractProgress, setExtractProgress] = useState<string>("");
+  const [thinkingPhrase, setThinkingPhrase] = useState<string>("Studying your footage…");
 
   // Listen for audio routing failures from videoRender so we can surface them
   // — better than a silent muted reel.
@@ -445,6 +448,25 @@ export default function ReelMultiplier() {
   const [description, setDescription] = useState<string>("");
   const [series, setSeries] = useState<string>("");
   const [stage, setStage] = useState<"idle" | "extracting" | "thinking" | "done" | "error">("idle");
+
+  // M3: Rotate AI-thinking copy so users don't stare at a static spinner.
+  useEffect(() => {
+    if (stage !== "thinking") return;
+    const phrases = [
+      "Studying your footage…",
+      "Picking the moments that stop a scroll…",
+      "Drafting hooks in your voice…",
+      "Tuning music + posting time…",
+      "Almost there — finalizing 3 reels…",
+    ];
+    let i = 0;
+    setThinkingPhrase(phrases[0]);
+    const id = setInterval(() => {
+      i = (i + 1) % phrases.length;
+      setThinkingPhrase(phrases[i]);
+    }, 3500);
+    return () => clearInterval(id);
+  }, [stage]);
   const [customLogo, setCustomLogo] = useState<{kind: "image" | "video"; url: string} | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -483,9 +505,9 @@ export default function ReelMultiplier() {
     if (!file) return;
     if (generateLockRef.current) return;       // I2: kill double-click race
     generateLockRef.current = true;
-    setError(null); setOutput(null); setStage("extracting");
+    setError(null); setOutput(null); setStage("extracting"); setExtractProgress("");
     try {
-      const { frames, durationSec } = await extractFramesFromFile(file);
+      const { frames, durationSec } = await extractFramesFromFile(file, (done, total) => setExtractProgress(`Reading frame ${done + 1} of ${total}…`));
       setExtractedFrames(frames);
       setStage("thinking");
       const ctrl = new AbortController();
@@ -622,8 +644,8 @@ export default function ReelMultiplier() {
             <div className="flex justify-end">
               <button onClick={generate} disabled={isBusy}
                 className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60">
-                {stage === "extracting" && <><Loader2 className="h-4 w-4 animate-spin" /> Reading frames…</>}
-                {stage === "thinking" && <><Loader2 className="h-4 w-4 animate-spin" /> Generating 3 platform reels…</>}
+                {stage === "extracting" && <><Loader2 className="h-4 w-4 animate-spin" /> {extractProgress || "Reading frames…"}</>}
+                {stage === "thinking" && <><Loader2 className="h-4 w-4 animate-spin" /> {thinkingPhrase}</>}
                 {!isBusy && <><Sparkles className="h-4 w-4" /> Multiply this video</>}
               </button>
             </div>
@@ -880,6 +902,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
 
   // User-editable overrides — generator → tool. Default to AI's suggestions.
   const [editedHook, setEditedHook] = useState<string>(pkg.hookLine);
+  const brandKit = useMemo(() => getBrandKit(), []); // P6: don't run every keystroke
   const [cutsExpanded, setCutsExpanded] = useState(false);
   const [editedCuts, setEditedCuts] = useState<{ startSec: number; endSec: number; reason?: string }[]>(
     pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec, reason: c.reason }))
@@ -1024,9 +1047,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             <div className="mt-1 font-display text-lg tracking-tight text-text">
               {editedCuts.length} cut{editedCuts.length === 1 ? "" : "s"}, stitched to 9:16 · {customLogo?.kind === "video" ? "motion logo" : (customLogo || getBrandKit().logoDataUrl) ? "logo applied" : "no logo"} · {musicFile ? (musicBPM ? `music ${musicBPM.toFixed(0)} BPM · ${beatSnapsApplied} cut${beatSnapsApplied === 1 ? "" : "s"} snapped to beat` : `music: ${musicFile.name.slice(0, 24)}`) : "source audio"}
             </div>
-            <p className="mt-1 text-xs text-muted">
-
-            </p>
+            
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
               <label className="flex items-center gap-1.5 text-muted">
                 Hook position:
@@ -1201,9 +1222,19 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             autoPick={true}
             excludeIds={excludeMusicIds}
           />
-          <p className="text-[10px] text-muted mt-2">
-            Royalty-free CC-BY (commercial-OK with attribution). Drop credit in your video description: <em>Music: &quot;Track Name&quot; by Artist · jamendo.com</em>
-          </p>
+          <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted">
+            <span>CC-BY · commercial-OK with credit in caption.</span>
+            <button
+              onClick={async () => {
+                const trackTitle = "Track Name";
+                const credit = `Music: "${trackTitle}" via jamendo.com`;
+                try { await navigator.clipboard.writeText(credit); } catch {}
+              }}
+              className="rounded border border-border-strong bg-bg px-2 py-0.5 hover:border-gold/60 hover:text-gold"
+            >
+              Copy credit
+            </button>
+          </div>
         </div>
       )}
 
@@ -1311,7 +1342,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
               </button>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {pkg.hashtags.map((h) => (
+              {Array.from(new Set(pkg.hashtags.map((h) => h.replace(/^#/, "").toLowerCase()))).map((h) => (
                 <span key={h} className="rounded-full border border-border bg-bg-deep px-2.5 py-0.5 text-xs text-text/85">#{h.replace(/^#/, "")}</span>
               ))}
             </div>
@@ -1444,7 +1475,7 @@ function DesignedThumbPreview({
       }
     })();
     return () => { cancelled = true; URL.revokeObjectURL(url); };
-  }, [sourceFile, timestampSec, overlayText, reason, brandName]);
+  }, [sourceFile, timestampSec, overlayText, brandName]);
 
   return (
     <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-bg-deep">
