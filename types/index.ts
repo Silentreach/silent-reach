@@ -8,7 +8,7 @@ export type ContentType =
 
 export type Platform = "instagram" | "youtube" | "youtube_shorts" | "linkedin" | "all";
 
-export type VideoLength = "15s" | "30s" | "60s" | "90s" | "3-5min" | "5-10min";
+export type VideoLength = "15s" | "30s" | "45s" | "60s" | "90s" | "3-5min" | "5-10min";
 
 export interface PreShootInput {
   contentType: ContentType;

@@ -186,11 +186,11 @@ export function getNicheBriefing(contentType?: string): string {
 
 
 
-export function buildPreShootPrompt(input: PreShootInput, ctx?: UserContext): {
+export function buildPreShootPrompt(input: PreShootInput, ctx?: UserContext, extraContext?: string): {
   system: string;
   user: string;
 } {
-  const system = `You are a senior short-form video strategist for Silent Story (premium real estate + renovation video, Victoria BC). Your output decides whether a reel hits 5K views or 50K. Treat it that way.
+  const baseSystem = `You are a senior short-form video strategist for Silent Story (premium real estate + renovation video, Victoria BC). Your output decides whether a reel hits 5K views or 50K. Treat it that way.
 
 ${getNicheBriefing(input.contentType)}
 
@@ -222,6 +222,8 @@ localRelevanceNotes: actual neighborhoods (Oak Bay, James Bay, Fairfield, Cordov
 successChecks (2-3 yes/no questions before publishing).
 
 OUTPUT: strict JSON matching the schema. Every required field present. No prose outside JSON. No markdown fences. JSON only.`;
+
+  const system = extraContext ? baseSystem + "\n\n" + extraContext : baseSystem;
 
   const detailsLine = input.details
     ? `Additional project details: ${input.details}\n`

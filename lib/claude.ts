@@ -168,10 +168,11 @@ async function callClaude(
 
 export async function generatePreShoot(
   input: PreShootInput,
-  ctx?: UserContext
+  ctx?: UserContext,
+  extraContext?: string,
 ): Promise<PreShootOutput> {
   const t0 = Date.now();
-  const { system, user } = buildPreShootPrompt(input, ctx);
+  const { system, user } = buildPreShootPrompt(input, ctx, extraContext);
   // Brief generation now uses Haiku 4.5 (same as Reel Multiplier) — the new richer
   // schema (5 hooks + bRoll + filmingNotes + openerVariants + successChecks) was
   // pushing Sonnet past the 55s SDK budget. Haiku is ~2x faster, sufficient quality
