@@ -84,7 +84,7 @@ export default function ConstructionForm({
   submitting,
 }: {
   onBack: () => void;
-  onSubmit: (inputs: ConstructionInputs) => void;
+  onSubmit: (inputs: ConstructionInputs, extras: { geocode: { formattedAddress: string; lat: number; lng: number; neighborhood?: string; postalCode?: string } | null }) => void;
   submitting?: boolean;
 }) {
   const [inputs, setInputs] = useState<ConstructionInputs>(DEFAULTS);
@@ -108,7 +108,7 @@ export default function ConstructionForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (canSubmit) onSubmit(inputs);
+          if (canSubmit) onSubmit(inputs, { geocode: null });
         }}
         className="grid gap-5"
       >

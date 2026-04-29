@@ -70,6 +70,36 @@ const GeneralSchema = z.object({
 
 const InputSchema = z.discriminatedUnion("niche", [RealEstateSchema, ConstructionSchema, GeneralSchema]);
 
+const NearbyPlaceSchema = z.object({
+  name: z.string(),
+  category: z.enum(["school", "park", "transit", "restaurant", "landmark"]),
+  distanceMeters: z.number(),
+  lat: z.number(),
+  lng: z.number(),
+  osmTags: z.record(z.string()).optional(),
+});
+
+const EnrichmentSchema = z
+  .object({
+    geocode: z.object({
+      formattedAddress: z.string(),
+      lat: z.number(),
+      lng: z.number(),
+      neighborhood: z.string().optional(),
+      postalCode: z.string().optional(),
+    }),
+    nearby: z
+      .object({
+        schools: z.array(NearbyPlaceSchema),
+        parks: z.array(NearbyPlaceSchema),
+        amenities: z.array(NearbyPlaceSchema),
+        landmarks: z.array(NearbyPlaceSchema),
+      })
+      .nullable()
+      .optional(),
+  })
+  .optional();
+
 const UserContextSchema = z
   .object({
     voiceSamples: z.array(z.string()).max(20).optional(),
@@ -102,11 +132,16 @@ export async function POST(req: NextRequest) {
     );
     const browserCtx = ctxParsed.success ? ctxParsed.data : undefined;
 
+    const enrParsed = EnrichmentSchema.safeParse(
+      body && typeof body === "object" ? body.enrichment : undefined,
+    );
+    const enrichment = enrParsed.success ? enrParsed.data : undefined;
+
     // Pull DB-backed context (voice samples, brand kit) when signed in.
     const dbCtx = await getServerUserContext().catch(() => undefined);
     const ctx = mergeContext(dbCtx, browserCtx);
 
-    const { legacyInput, injectedContext } = bridgeNicheToLegacy(parsed.data as NicheInputs);
+    const { legacyInput, injectedContext } = bridgeNicheToLegacy(parsed.data as NicheInputs, undefined, enrichment);
     const output = await generatePreShoot(legacyInput, ctx, injectedContext);
 
     return NextResponse.json({ output, niche: parsed.data.niche });

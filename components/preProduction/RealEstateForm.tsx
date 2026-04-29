@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Loader2, MapPin } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import AddressInput from "./AddressInput";
 import {
   Field,
   ChipGroup,
@@ -72,12 +73,13 @@ export default function RealEstateForm({
   submitting,
 }: {
   onBack: () => void;
-  onSubmit: (inputs: RealEstateInputs) => void;
+  onSubmit: (inputs: RealEstateInputs, extras: { geocode: { formattedAddress: string; lat: number; lng: number; neighborhood?: string; postalCode?: string } | null }) => void;
   submitting?: boolean;
 }) {
   const [inputs, setInputs] = useState<RealEstateInputs>(DEFAULTS);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [propertyOpen, setPropertyOpen] = useState(false);
+  const [geocode, setGeocode] = useState<{ formattedAddress: string; lat: number; lng: number; neighborhood?: string; postalCode?: string } | null>(null);
 
   // Auto-bump length to 60s when Luxury is chosen, and auto-add cinematic mood.
   function setPersonas(personas: RealEstateBuyerPersona[]) {
@@ -99,7 +101,7 @@ export default function RealEstateForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (canSubmit) onSubmit(inputs);
+          if (canSubmit) onSubmit(inputs, { geocode });
         }}
         className="grid gap-5"
       >
@@ -111,19 +113,13 @@ export default function RealEstateForm({
             <Field
               label="Address"
               required
-              hint="Type a Victoria-area address. Mintflow will look up the actual neighborhood, schools, parks, and transit nearby."
+              hint="Type a Victoria-area address. Mintflow looks up the actual neighborhood, schools, parks, and transit nearby."
             >
-              <div className="relative">
-                <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted/60" />
-                <TextInput
-                  type="text"
-                  placeholder="868 Orono Ave, Saanich BC"
-                  value={inputs.address}
-                  onChange={(e) => setInputs((s) => ({ ...s, address: e.target.value }))}
-                  autoComplete="off"
-                  className="pl-9"
-                />
-              </div>
+              <AddressInput
+                value={inputs.address}
+                onChange={(raw) => setInputs((s) => ({ ...s, address: raw }))}
+                onResolved={(g) => setGeocode(g)}
+              />
             </Field>
 
             <Field

@@ -57,7 +57,7 @@ export default function GeneralForm({
   submitting,
 }: {
   onBack: () => void;
-  onSubmit: (inputs: GeneralInputs) => void;
+  onSubmit: (inputs: GeneralInputs, extras: { geocode: { formattedAddress: string; lat: number; lng: number; neighborhood?: string; postalCode?: string } | null }) => void;
   submitting?: boolean;
 }) {
   const [inputs, setInputs] = useState<GeneralInputs>(DEFAULTS);
@@ -88,7 +88,7 @@ export default function GeneralForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (canSubmit) onSubmit(inputs);
+          if (canSubmit) onSubmit(inputs, { geocode: null });
         }}
         className="grid gap-5"
       >

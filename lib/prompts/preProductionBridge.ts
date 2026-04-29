@@ -17,6 +17,43 @@ import type {
   Mood,
 } from "@/types/preProduction";
 
+export interface BridgeEnrichment {
+  geocode: { formattedAddress: string; lat: number; lng: number; neighborhood?: string; postalCode?: string };
+  nearby?: {
+    schools: Array<{ name: string; distanceMeters: number; category: string }>;
+    parks: Array<{ name: string; distanceMeters: number; category: string }>;
+    amenities: Array<{ name: string; distanceMeters: number; category: string }>;
+    landmarks: Array<{ name: string; distanceMeters: number; category: string }>;
+  } | null;
+}
+
+function enrichmentBlock(enr?: BridgeEnrichment): string {
+  if (!enr) return "";
+  const lines: string[] = [
+    "",
+    "",
+    "ENRICHMENT (verified neighborhood data — every USP and locationShot MUST cite a specific name and distance from this list, not invented):",
+    `- Resolved address: ${enr.geocode.formattedAddress}`,
+  ];
+  if (enr.geocode.neighborhood) lines.push(`- Neighborhood: ${enr.geocode.neighborhood}`);
+
+  const fmt = (places: { name: string; distanceMeters: number }[], label: string, cap = 5) => {
+    if (!places.length) return;
+    const top = places.slice(0, cap).map(p => `${p.name} (${p.distanceMeters}m)`).join("; ");
+    lines.push(`- Nearby ${label}: ${top}`);
+  };
+  if (enr.nearby) {
+    fmt(enr.nearby.schools, "schools");
+    fmt(enr.nearby.parks, "parks / green space");
+    fmt(enr.nearby.amenities, "amenities (transit / cafés / restaurants)");
+    fmt(enr.nearby.landmarks, "landmarks (museums / golf / beaches)");
+  }
+  lines.push("");
+  lines.push("DIRECTIVE: Every USP must cite a specific evidence point — name + distance + how-to-get-there. The AI's job is reporting, not advertising. Banned: 'walkable', 'moments from', 'close to amenities', 'minutes to'. Use real distances ('380m to Cordova Bay Elementary via Walema Ave', not 'walkable to schools').");
+  return lines.join("\n");
+}
+
+
 const STAGE_LABELS: Record<RealEstateListingStage, string> = {
   coming_soon: "Coming Soon",
   just_listed: "Just Listed",
@@ -75,9 +112,13 @@ export interface BridgeOutput {
   injectedContext: string;
 }
 
-export function bridgeNicheToLegacy(inputs: NicheInputs, address?: string): BridgeOutput {
-  if (inputs.niche === "real_estate") return bridgeRealEstate(inputs, address);
-  if (inputs.niche === "construction") return bridgeConstruction(inputs, address);
+export function bridgeNicheToLegacy(
+  inputs: NicheInputs,
+  address?: string,
+  enrichment?: BridgeEnrichment,
+): BridgeOutput {
+  if (inputs.niche === "real_estate") return bridgeRealEstate(inputs, address, enrichment);
+  if (inputs.niche === "construction") return bridgeConstruction(inputs, address, enrichment);
   return bridgeGeneral(inputs);
 }
 
@@ -102,7 +143,7 @@ function bannedPhrasesBlock(): string {
     "Replace abstract claims with concrete numbers, distances, and place names.";
 }
 
-function bridgeRealEstate(inputs: RealEstateInputs, addressOverride?: string): BridgeOutput {
+function bridgeRealEstate(inputs: RealEstateInputs, addressOverride?: string, enrichment?: BridgeEnrichment): BridgeOutput {
   const address = addressOverride ?? inputs.address;
   const personasLabel = inputs.buyerPersonas.map((p) => PERSONA_LABELS[p]).join(", ") || "general buyer";
   const stageLabel = STAGE_LABELS[inputs.listingStage];
@@ -146,6 +187,7 @@ function bridgeRealEstate(inputs: RealEstateInputs, addressOverride?: string): B
   injectedContext += personaDirectives(inputs.buyerPersonas);
   injectedContext += heroShotBlock(inputs.heroShot);
   injectedContext += moodBlock(inputs.moods);
+  injectedContext += enrichmentBlock(enrichment);
   injectedContext += bannedPhrasesBlock();
 
   return { legacyInput, injectedContext };
@@ -193,7 +235,7 @@ function personaDirectives(personas: RealEstateBuyerPersona[]): string {
   return lines.join("\n");
 }
 
-function bridgeConstruction(inputs: ConstructionInputs, addressOverride?: string): BridgeOutput {
+function bridgeConstruction(inputs: ConstructionInputs, addressOverride?: string, enrichment?: BridgeEnrichment): BridgeOutput {
   const phaseLabel = PHASE_LABELS[inputs.projectPhase];
   const arcLabel = ARC_LABELS[inputs.transformationArc];
   const tradesLabel = inputs.tradeFocus.map((t) => TRADE_LABELS[t]).join(", ");
@@ -231,6 +273,7 @@ function bridgeConstruction(inputs: ConstructionInputs, addressOverride?: string
   }
   injectedContext += heroShotBlock(inputs.heroShot);
   injectedContext += moodBlock(inputs.moods);
+  injectedContext += enrichmentBlock(enrichment);
 
   return { legacyInput, injectedContext };
 }

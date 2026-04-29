@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import BriefResult from "@/components/BriefResult";
 import VoiceNudge from "@/components/VoiceNudge";
 import NichePicker from "@/components/preProduction/NichePicker";
@@ -17,6 +17,7 @@ type Stage = "pick" | "form" | "loading" | "result" | "error";
 
 export default function PreProductionPage() {
   const [stage, setStage] = useState<Stage>("pick");
+  const [loadingPhase, setLoadingPhase] = useState<"thinking" | "geocoded" | "synthesizing">("thinking");
   const [niche, setNiche] = useState<Niche | null>(null);
   const [output, setOutput] = useState<PreShootOutput | null>(null);
   const [legacyInputForHistory, setLegacyInputForHistory] = useState<PreShootInput | null>(null);
@@ -36,14 +37,44 @@ export default function PreProductionPage() {
     setError(null);
   }
 
-  async function generate(inputs: NicheInputs) {
+  async function generate(
+    inputs: NicheInputs,
+    extras: { geocode: { formattedAddress: string; lat: number; lng: number; neighborhood?: string; postalCode?: string } | null } = { geocode: null },
+  ) {
     setStage("loading");
+    setLoadingPhase(extras.geocode ? "geocoded" : "thinking");
     setError(null);
     try {
+      // If we have a resolved address, fan out the nearby lookup in parallel
+      // with the brief generation. The result is forwarded to the API so the
+      // bridge can inject ENRICHMENT context into the prompt.
+      let nearby: unknown = null;
+      if (extras.geocode) {
+        try {
+          const r = await fetch("/api/enrichment/nearby", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lat: extras.geocode.lat, lng: extras.geocode.lng }),
+            signal: AbortSignal.timeout(20_000),
+          });
+          if (r.ok) {
+            const d = await r.json();
+            nearby = d.result ?? null;
+            setLoadingPhase("synthesizing");
+          }
+        } catch {
+          // Non-fatal — brief still generates without nearby context.
+        }
+      }
+
       const res = await fetch("/api/pre-production", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: inputs, userContext: getUserContext() }),
+        body: JSON.stringify({
+          input: inputs,
+          userContext: getUserContext(),
+          enrichment: extras.geocode ? { geocode: extras.geocode, nearby } : undefined,
+        }),
       });
 
       let data: { error?: string; output?: PreShootOutput };
@@ -100,7 +131,7 @@ export default function PreProductionPage() {
         <GeneralForm onBack={backToPicker} onSubmit={generate} />
       )}
 
-      {stage === "loading" && <LoadingPanel niche={niche} />}
+      {stage === "loading" && <LoadingPanel niche={niche} phase={loadingPhase} />}
 
       {stage === "error" && (
         <div className="mx-auto max-w-2xl rounded-2xl border border-red-500/30 bg-red-500/5 p-8 text-center">
@@ -150,17 +181,47 @@ export default function PreProductionPage() {
   );
 }
 
-function LoadingPanel({ niche }: { niche: Niche | null }) {
-  const phrase =
-    niche === "real_estate"
-      ? "Reading the neighborhood…"
-      : niche === "construction"
-        ? "Tuning to the phase…"
-        : "Studying the angle…";
+function LoadingPanel({ niche, phase }: { niche: Niche | null; phase: "thinking" | "geocoded" | "synthesizing" }) {
+  // Three-step cinematic phrase rotation. We cycle within "thinking" while
+  // we wait on Claude, but if address resolved we lead with the neighborhood beat.
+  const RE_PHRASES = [
+    "Reading the neighborhood…",
+    "Picking the hero shot…",
+    "Drafting three angles…",
+  ];
+  const CONST_PHRASES = [
+    "Tuning to the phase…",
+    "Building the cut hierarchy…",
+    "Drafting three angles…",
+  ];
+  const GEN_PHRASES = [
+    "Studying the angle…",
+    "Tightening the hook…",
+    "Drafting three angles…",
+  ];
+
+  const phrases =
+    niche === "real_estate" ? RE_PHRASES :
+    niche === "construction" ? CONST_PHRASES :
+    GEN_PHRASES;
+
+  const [idx, setIdx] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % phrases.length), 1800);
+    return () => clearInterval(t);
+  }, [phrases.length]);
+
   return (
-    <div className="mx-auto max-w-xl rounded-2xl border border-border/70 bg-bg p-12 text-center">
-      <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-gold/30 border-t-gold" />
-      <div className="mt-6 font-display text-xl tracking-tight text-text">{phrase}</div>
+    <div className="mx-auto max-w-xl rounded-2xl border border-border/70 bg-gradient-to-b from-bg to-bg-deep/40 p-12 text-center">
+      {/* Pulse Mark — gold concentric arcs */}
+      <div className="relative mx-auto h-16 w-16">
+        <div className="absolute inset-0 animate-ping rounded-full border border-gold/30" />
+        <div className="absolute inset-2 animate-pulse rounded-full border-2 border-gold/50" />
+        <div className="absolute inset-5 rounded-full bg-gold" />
+      </div>
+      <div className="mt-7 font-display text-xl tracking-tight text-text transition-all duration-500" key={idx}>
+        {phrases[idx]}
+      </div>
       <p className="mt-2 text-[13px] text-muted">
         Drafting hooks, shot list, opener variants, thumbnail direction.
         Usually 15–30 seconds.
