@@ -117,25 +117,42 @@ export default function AboutPage() {
 
         <div className="mt-6 space-y-5 text-lg leading-[1.7] text-text/90 md:text-xl md:leading-[1.65]">
           <p>
-            I&rsquo;m Deloar Hossain, a filmmaker in Victoria. For ten years I&rsquo;ve
-            shot listings, weddings, and short films across British Columbia, and I kept
-            watching realtors and homeowners spend a thousand dollars on a video that
-            looks like every other video on the same street.
+            I&rsquo;m Deloar Hossain &mdash; most people on set call me Lovelu. I went
+            to film school for cinematography.
           </p>
           <p>
-            The problem isn&rsquo;t budget — it&rsquo;s that nobody hands a creator a
-            clear plan.
+            In 2013 I started a video production company in Dhaka called Rawfilm. For
+            ten years we shot TV commercials, corporate films, documentaries, music
+            videos, and online commercials. Big crews, tight plans. Treatments and shot
+            lists and lookbooks for every project. Things shipped on time because every
+            shoot started with a clear brief.
           </p>
           <p>
-            Mintflow is the plan I wished someone had handed me on my first listing
-            shoot: paste the address, get the unique selling points grounded in the
-            actual neighborhood, the shot list, the on-set direction, the edit playbook,
-            and the platform-ready cuts.
+            I moved to Victoria in 2023 and founded Silent Story. I started shooting
+            what was in front of me &mdash; listings for realtors, progress videos for
+            builders renovating houses. The work was good, the demand was real, and the
+            prospect was bigger than I expected.
           </p>
           <p>
-            It is a filmmaker&rsquo;s brain, made local to BC, available before sunrise
-            on shoot day. I built it because Silent Story can only film one house per
-            weekend. <span className="text-gold">Mintflow can help film a thousand.</span>
+            But the way it was being made was nothing like what I came from. No briefs.
+            No shot lists. No lookbooks. A creator and a half-formed idea and whatever
+            came out came out. Same property, same neighborhood, ten different videos
+            that all looked the same.
+          </p>
+          <p>
+            So I started writing my own version of the documents I used to receive on
+            set in Dhaka &mdash; the brief, the shot list, the edit playbook &mdash;
+            and running them on myself before each shoot. The work got sharper. The
+            realtors I worked with noticed.
+          </p>
+          <p>
+            Mintflow is that system, made into one app. Built for the way listings and
+            renovations actually get made in BC. The brief, the shoot, the edit, the cut
+            you ship &mdash; one studio, one workflow.
+          </p>
+          <p>
+            Silent Story can shoot one house a weekend.{" "}
+            <span className="text-gold">Mintflow is meant to help film a thousand.</span>
           </p>
         </div>
 
@@ -144,9 +161,9 @@ export default function AboutPage() {
             <span className="text-sm font-semibold">DH</span>
           </div>
           <div>
-            <div className="text-sm font-medium text-text">Deloar Hossain</div>
+            <div className="text-sm font-medium text-text">Deloar Hossain &middot; <span className="text-muted/80">Lovelu</span></div>
             <div className="text-[12px] text-muted">
-              Founder, Mintflow · Director, Silent Story
+              Founder, Mintflow &middot; Director, Silent Story &middot; Founder, Rawfilm (Dhaka, 2013)
             </div>
           </div>
         </div>

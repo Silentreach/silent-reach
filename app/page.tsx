@@ -199,6 +199,77 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ============ FOUNDER ============ */}
+      <section className="border-t border-border/60">
+        <div className="mx-auto max-w-5xl px-5 py-24">
+          <div className="grid gap-10 md:grid-cols-[180px_1fr] md:items-start">
+            <div className="flex md:justify-start">
+              <div className="relative">
+                <div className="flex h-32 w-32 items-center justify-center rounded-full border border-gold/30 bg-gradient-to-br from-gold/15 to-gold/5 md:h-40 md:w-40">
+                  <span className="font-display text-4xl text-gold md:text-5xl">DH</span>
+                </div>
+                <div className="absolute -bottom-1 -right-1 rounded-full border border-border/70 bg-bg-deep px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-muted">
+                  Lovelu
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.25em] text-gold/80">
+                About the founder
+              </div>
+              <h2 className="mt-3 font-display text-3xl leading-[1.1] tracking-tight text-text md:text-[40px]">
+                Built by a working cinematographer, in Victoria.
+              </h2>
+
+              <div className="mt-6 space-y-4 text-base leading-relaxed text-text/85 md:text-lg">
+                <p>
+                  I&rsquo;m Deloar Hossain &mdash; Lovelu on set. I spent ten years in
+                  Dhaka running a production company called Rawfilm. TV commercials,
+                  corporate films, documentaries, music videos. Big crews, treatments,
+                  shot lists for every project.
+                </p>
+                <p>
+                  I moved to Victoria in 2023 and started Silent Story. Listings for
+                  realtors, renovation progress videos for builders. The work was good,
+                  the demand was real &mdash; but nothing in the workflow looked like
+                  what I came from. No briefs. No shot lists. No lookbooks.
+                </p>
+                <p>
+                  Mintflow is the system I started writing for myself, made into one
+                  app.
+                </p>
+              </div>
+
+              <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-muted">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1 w-1 rounded-full bg-gold/60" />
+                  Founder, Mintflow
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1 w-1 rounded-full bg-gold/60" />
+                  Director, Silent Story (Victoria, 2023)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1 w-1 rounded-full bg-gold/60" />
+                  Founder, Rawfilm (Dhaka, 2013)
+                </span>
+              </div>
+
+              <div className="mt-8">
+                <Link
+                  href="/about"
+                  className="inline-flex items-center gap-1.5 text-[13px] text-gold transition hover:text-gold-light"
+                >
+                  Read the full story
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ============ FINAL CTA + EMAIL CAPTURE ============ */}
       <section className="border-t border-border/60">
         <div className="mx-auto max-w-4xl px-5 py-24 text-center">
