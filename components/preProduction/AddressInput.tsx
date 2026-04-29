@@ -74,19 +74,21 @@ export default function AddressInput({ value, onChange, onResolved, placeholder 
   }, [value]);
 
   return (
-    <div className="relative">
-      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted/60" />
-      <TextInput
-        type="text"
-        placeholder={placeholder ?? "868 Orono Ave, Saanich BC"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        autoComplete="off"
-        className="pl-9 pr-9"
-      />
-      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-        {state === "looking" && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />}
-        {state === "found" && <Check className="h-3.5 w-3.5 text-gold" />}
+    <div>
+      <div className="relative">
+        <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted/60" />
+        <TextInput
+          type="text"
+          placeholder={placeholder ?? "868 Orono Ave, Saanich BC"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="off"
+          className="pl-9 pr-9"
+        />
+        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+          {state === "looking" && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />}
+          {state === "found" && <Check className="h-3.5 w-3.5 text-gold" />}
+        </div>
       </div>
 
       {state === "found" && resolvedAddress && resolvedAddress.toLowerCase() !== value.trim().toLowerCase() && (
