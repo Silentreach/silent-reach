@@ -1147,19 +1147,37 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                 )}
                 <button
                   onClick={() => {
+                    // Clear the preview so the user knows it's gone
                     if (previewUrl) URL.revokeObjectURL(previewUrl);
                     if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
                     setPreviewUrl(null);
                     setPreviewThumbUrl(null);
                     setRenderState("idle");
+
+                    // Reset music — MusicBrowser autoPick will randomize from
+                    // top 4 search results (different track each time).
+                    setMusicFile(null);
+                    setMusicBPM(null);
+                    setPixabayTrackId(null);
+                    onTrackPicked(null);
+
+                    // Re-shuffle cut times by ±0.3s within their original range
+                    // so the next render has visibly different in/out points
+                    // even if the underlying AI cuts are the same.
+                    setEditedCuts((prev) => prev.map((c) => {
+                      const jitter = () => (Math.random() - 0.5) * 0.6; // ±0.3s
+                      const newStart = Math.max(0, c.startSec + jitter());
+                      const newEnd   = Math.max(newStart + 1.5, c.endSec + jitter());
+                      return { ...c, startSec: Math.round(newStart * 10) / 10, endSec: Math.round(newEnd * 10) / 10 };
+                    }));
                   }}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-bg-deep/40 px-4 py-2 text-sm text-muted hover:text-text"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-mint/40 bg-mint/10 px-4 py-2 text-sm text-mint hover:bg-mint/20"
                 >
-                  Try a different cut → re-render
+                  ↻ Try a different version
                 </button>
               </div>
               <p className="text-[11px] text-muted leading-relaxed mt-2">
-                Not happy with it? Nudge cuts/hook below and hit re-render. Or switch to a different platform tab and render that one too — keep the one you like.
+                Click above to re-roll music and shuffle cut timings — gets you a genuinely different version, not the same render again.
               </p>
             </div>
           </div>
