@@ -24,7 +24,11 @@ export async function detectBPM(file: File): Promise<number | null> {
     const arr = await file.arrayBuffer();
     const buf = await ctx.decodeAudioData(arr);
     // analyze takes the buffer and returns BPM as a number
-    const bpm = await analyze(buf);
+    // Wrap in 5s race — analyze() can hang on weird audio
+    const bpm = await Promise.race<number>([
+      analyze(buf),
+      new Promise<number>((_, rej) => setTimeout(() => rej(new Error("BPM detect timeout")), 5000)),
+    ]);
     try { await ctx.close(); } catch {}
     if (!isFinite(bpm) || bpm < 50 || bpm > 220) return null;
     return Math.round(bpm * 10) / 10; // one decimal

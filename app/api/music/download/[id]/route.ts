@@ -32,6 +32,7 @@ export async function GET(
   try {
     metaRes = await fetch(metaUrl.toString(), {
       headers: { "User-Agent": "Mintflow/1.0" },
+      signal: AbortSignal.timeout(8000),
     });
   } catch (err) {
     return NextResponse.json(
@@ -60,6 +61,7 @@ export async function GET(
   try {
     audioRes = await fetch(audioUrl, {
       headers: { "User-Agent": "Mintflow/1.0" },
+      signal: AbortSignal.timeout(8000),
     });
   } catch (err) {
     return NextResponse.json(

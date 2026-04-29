@@ -59,6 +59,16 @@ export default function MusicBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Pause any preview audio when the component unmounts (e.g. user switches
+  // platform tabs while a track is playing). Otherwise audio plays into the
+  // void and setState fires on unmounted.
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      audioRef.current = null;
+    };
+  }, []);
+
   async function doSearch(q: string, isRetry = false) {
     if (!q.trim()) return;
     setLoading(true);
@@ -118,8 +128,11 @@ export default function MusicBrowser({
   async function selectTrack(track: PixabayTrack) {
     setSelectingId(track.id);
     setError(null);
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 15000); // I5: 15s timeout
     try {
-      const r = await fetch(track.audioUrl);
+      const r = await fetch(track.audioUrl, { signal: ctrl.signal });
+      clearTimeout(timeoutId);
       if (!r.ok) throw new Error(`Download failed (${r.status})`);
       const blob = await r.blob();
       // Stop any current preview audio
@@ -127,6 +140,7 @@ export default function MusicBrowser({
       setPlayingId(null);
       onSelect(track, blob);
     } catch (err) {
+      clearTimeout(timeoutId);
       setError(err instanceof Error ? err.message : "Couldn't load track");
     } finally {
       setSelectingId(null);

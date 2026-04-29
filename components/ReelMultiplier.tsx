@@ -432,11 +432,29 @@ export default function ReelMultiplier() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number>(0);
+  const [audioRoutingWarning, setAudioRoutingWarning] = useState<string | null>(null);
+
+  // Listen for audio routing failures from videoRender so we can surface them
+  // — better than a silent muted reel.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => setAudioRoutingWarning("Audio routing hit a browser limitation — your reel rendered without audio. This can happen on Safari. Try a fresh tab or desktop Chrome.");
+    window.addEventListener("mintflow-audio-routing-failed", handler);
+    return () => window.removeEventListener("mintflow-audio-routing-failed", handler);
+  }, []);
   const [description, setDescription] = useState<string>("");
   const [series, setSeries] = useState<string>("");
   const [stage, setStage] = useState<"idle" | "extracting" | "thinking" | "done" | "error">("idle");
   const [customLogo, setCustomLogo] = useState<{kind: "image" | "video"; url: string} | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Abort the Claude fetch if the user navigates away mid-generation.
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
+
+  // Lock against double-click on the generate button (state updates aren't
+  // synchronous; useRef gives us a sub-50ms guard).
+  const generateLockRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<ReelMultiplierOutput | null>(null);
   const [extractedFrames, setExtractedFrames] = useState<ExtractedFrame[]>([]);
@@ -463,11 +481,15 @@ export default function ReelMultiplier() {
 
   const generate = async () => {
     if (!file) return;
+    if (generateLockRef.current) return;       // I2: kill double-click race
+    generateLockRef.current = true;
     setError(null); setOutput(null); setStage("extracting");
     try {
       const { frames, durationSec } = await extractFramesFromFile(file);
       setExtractedFrames(frames);
       setStage("thinking");
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
       const res = await fetch("/api/reel-multiplier", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -475,6 +497,7 @@ export default function ReelMultiplier() {
           input: { sourceDurationSec: durationSec, description: description || undefined, series: series || undefined, frames },
           userContext: getUserContext(),
         }),
+        signal: ctrl.signal,
       });
       let data: { error?: string; output?: ReelMultiplierOutput };
       const ct = res.headers.get("content-type") || "";
@@ -487,6 +510,7 @@ export default function ReelMultiplier() {
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       if (!data.output) throw new Error("Empty response. Please try again.");
       setOutput(data.output); setStage("done");
+      generateLockRef.current = false;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setError(msg); setStage("error");
@@ -666,6 +690,12 @@ function ReelResults({ output, sourceUrl, sourceFile, customLogo, extractedFrame
         {typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent) && !/CriOS|EdgiOS/.test(navigator.userAgent) && (
           <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 p-3 text-xs text-amber-200">
             <strong>iOS Safari note:</strong> Reel rendering is unreliable on iPhone/iPad Safari. For best results use desktop Chrome, desktop Safari 17+, or Edge. iOS Chrome works the same as Safari.
+          </div>
+        )}
+        {audioRoutingWarning && (
+          <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-3 text-xs text-amber-200">
+            <strong>Audio:</strong> {audioRoutingWarning}
+            <button onClick={() => setAudioRoutingWarning(null)} className="ml-2 text-muted hover:text-text">dismiss</button>
           </div>
         )}
 

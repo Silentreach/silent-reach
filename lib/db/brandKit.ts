@@ -28,7 +28,12 @@ export async function getBrandKit(): Promise<BrandKit> {
     .eq("id", profile.org_id)
     .single();
   if (error || !data?.brand_kit) return {};
-  return (data.brand_kit as BrandKit) || {};
+  const raw = (data.brand_kit as BrandKit) || {};
+  return {
+    ...raw,
+    primaryColor:   safeHex(raw.primaryColor, "#0a0a0a"),
+    secondaryColor: safeHex(raw.secondaryColor, "#d4af37"),
+  };
 }
 
 export async function setBrandKit(kit: BrandKit): Promise<void> {
@@ -48,4 +53,11 @@ export async function setBrandKit(kit: BrandKit): Promise<void> {
     .update({ brand_kit: kit })
     .eq("id", profile.org_id);
   if (error) throw error;
+}
+
+
+const HEX_RX = /^#[0-9a-f]{3,8}$/i;
+function safeHex(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  return HEX_RX.test(value) ? value : fallback;
 }

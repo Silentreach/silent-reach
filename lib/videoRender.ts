@@ -147,8 +147,18 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
     try {
       mediaSourceNode = audioCtx.createMediaElementSource(video);
       mediaSourceNode.connect(masterGain);
-    } catch {
-      // Some browsers throw if createMediaElementSource is called twice — fall back to no audio
+    } catch (audioErr) {
+      // Some browsers (notably Safari, especially on iOS) throw when
+      // createMediaElementSource is called twice or after the AudioContext
+      // is in an unexpected state. Don't silently produce a muted reel —
+      // emit a custom event so the UI can show a warning, then continue
+      // with no audio fallback so the render still completes.
+      console.warn("[render] audio routing failed, reel will have no source audio:", audioErr);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mintflow-audio-routing-failed", {
+          detail: { error: String(audioErr) },
+        }));
+      }
     }
   }
 
@@ -234,7 +244,9 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
       }
 
       if (hookLine && elapsedTotalSec < 3.0) {
-        drawAnimatedHook(ctx, hookLine, dims, hookPos, elapsedTotalSec, opts.hookBackground || "none", opts.hookBackgroundColor, opts.hookStyle || "stagger");
+        // I11: defense-in-depth truncate to 100 chars max
+        const safeHook = hookLine.length > 100 ? hookLine.slice(0, 100) + "…" : hookLine;
+        drawAnimatedHook(ctx, safeHook, dims, hookPos, elapsedTotalSec, opts.hookBackground || "none", opts.hookBackgroundColor, opts.hookStyle || "stagger");
       }
 
       // Visual fadeout in the last fadeOutSec seconds of MAIN (before outro)
