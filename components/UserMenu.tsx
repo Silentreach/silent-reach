@@ -60,7 +60,7 @@ export default function UserMenu() {
   // Pre-hydration: render a neutral placeholder so the layout doesn't shift.
   if (!me.loaded) {
     return (
-      <div className="h-7 w-16 rounded-full border border-border/60 bg-bg-deep/40" aria-hidden />
+      <div className="h-7 w-16 animate-pulse rounded-full border border-border/60 bg-bg-deep/40" aria-hidden />
     );
   }
 
@@ -110,7 +110,7 @@ export default function UserMenu() {
             <MenuLink href="/library" icon={<FolderOpen className="h-3.5 w-3.5" />}>
               Library
             </MenuLink>
-            <MenuLink href="/settings/voice" icon={<SlidersHorizontal className="h-3.5 w-3.5" />}>
+            <MenuLink href="/settings" icon={<SlidersHorizontal className="h-3.5 w-3.5" />}>
               Settings
             </MenuLink>
           </div>

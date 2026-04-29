@@ -12,7 +12,6 @@ import {
   Mic,
   Sun,
   Layers,
-  Quote,
   TrendingUp,
 } from "lucide-react";
 import EmailCapture from "@/components/EmailCapture";
@@ -138,36 +137,6 @@ export default function Home() {
                 { icon: Layers,     label: "Chapter markers" },
               ]}
             />
-          </div>
-        </div>
-      </section>
-
-      {/* ============ FOUNDER NOTE ============ */}
-      <section className="border-t border-border/60">
-        <div className="mx-auto max-w-4xl px-5 py-24">
-          <div className="rounded-2xl border border-border bg-surface p-8 md:p-12">
-            <Quote className="h-8 w-8 text-gold/60" />
-            <blockquote className="mt-6 font-display text-2xl leading-[1.35] tracking-tight text-text md:text-[28px]">
-              I built Mintflow because I am the customer.
-              <br />
-              <span className="text-muted">
-                I shoot real estate and renovation video in Victoria, BC. Every reel was a
-                Tuesday: write the brief in Notion, design the cover in Canva, draft the
-                caption in ChatGPT, cut in Premiere, A/B the title in a spreadsheet. Six
-                tabs to ship one reel. Mintflow is the studio I wish I&apos;d had three years
-                ago — built around how the work actually happens, not how a tool category
-                wants you to think about it.
-              </span>
-            </blockquote>
-            <div className="mt-8 flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-full bg-gold/15 font-display text-base font-medium text-gold">
-                D
-              </div>
-              <div>
-                <div className="text-sm font-medium text-text">Deloar Hossain</div>
-                <div className="text-xs text-muted">Founder · Silent Story · Mintflow</div>
-              </div>
-            </div>
           </div>
         </div>
       </section>

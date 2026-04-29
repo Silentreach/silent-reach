@@ -18,6 +18,7 @@ const NAV: NavItem[] = [
   { href: "/post-production", label: "Post-Production", prefixMatch: true },
   { href: "/distribution",    label: "Distribution",    prefixMatch: true },
   { href: "/pricing",         label: "Pricing"                            },
+  { href: "/about",           label: "About"                              },
 ];
 
 export default function Header() {
