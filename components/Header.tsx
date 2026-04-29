@@ -7,20 +7,16 @@ import Logo from "@/components/Logo";
 interface NavItem {
   href: string;
   label: string;
-  /** Pillar grouping for visual subtlety */
-  pillar?: "pre" | "prod" | "post";
+  /** True if any sub-route under href should highlight this link */
+  prefixMatch?: boolean;
 }
 
 const NAV: NavItem[] = [
-  { href: "/pre-shoot",        label: "Brief",       pillar: "pre" },
-  { href: "/production",       label: "Production",  pillar: "prod" },
-  { href: "/post-upload",      label: "Pack",        pillar: "post" },
-  { href: "/reel-multiplier",  label: "Multiplier",pillar: "post" },
-  { href: "/thumbnail-studio", label: "Thumbnails",  pillar: "post" },
-  { href: "/library",          label: "Library",   pillar: "post" },
-  { href: "/dashboard",        label: "Dashboard"              },
-  { href: "/pricing",          label: "Pricing"                },
-  { href: "/settings",         label: "Settings"               },
+  { href: "/pre-production",  label: "Pre-Production",  prefixMatch: true },
+  { href: "/production",      label: "Production",      prefixMatch: true },
+  { href: "/post-production", label: "Post-Production", prefixMatch: true },
+  { href: "/distribution",    label: "Distribution",    prefixMatch: true },
+  { href: "/pricing",         label: "Pricing"                            },
 ];
 
 export default function Header() {
@@ -33,20 +29,23 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-bg/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5">
-        <Logo size="sm" />
-        <nav className="flex items-center gap-1 text-[13px]">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-5 py-3.5">
+        <Link href="/" aria-label="Mintflow home" className="shrink-0">
+          <Logo size="sm" />
+        </Link>
+
+        <nav className="hidden items-center gap-1 text-[13px] md:flex">
           {NAV.map((item) => {
-            const active = pathname === item.href;
+            const active = item.prefixMatch
+              ? pathname === item.href || pathname.startsWith(item.href + "/")
+              : pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={[
                   "relative rounded-full px-3 py-1.5 transition-colors",
-                  active
-                    ? "text-gold"
-                    : "text-muted hover:text-text",
+                  active ? "text-gold" : "text-muted hover:text-text",
                 ].join(" ")}
               >
                 {item.label}
@@ -56,16 +55,36 @@ export default function Header() {
               </Link>
             );
           })}
-          <span className="mx-2 hidden h-4 w-px bg-border md:inline-block" />
-          <Link
-            href="/history"
-            className={[
-              "hidden rounded-full px-3 py-1.5 transition-colors md:inline-block",
-              pathname === "/history" ? "text-gold" : "text-muted hover:text-text",
-            ].join(" ")}
-          >
-            History
-          </Link>
+        </nav>
+
+        <Link
+          href="/login"
+          className="rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1.5 text-[13px] font-medium text-gold transition hover:bg-gold/15"
+        >
+          Sign in
+        </Link>
+      </div>
+
+      {/* Mobile pillar strip — keeps the four-pillar story visible on phones */}
+      <div className="md:hidden border-t border-border/50 bg-bg-deep/40">
+        <nav className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-5 py-2 text-[12px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {NAV.map((item) => {
+            const active = item.prefixMatch
+              ? pathname === item.href || pathname.startsWith(item.href + "/")
+              : pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={[
+                  "shrink-0 rounded-full px-2.5 py-1 transition-colors",
+                  active ? "text-gold" : "text-muted hover:text-text",
+                ].join(" ")}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
       </div>
     </header>

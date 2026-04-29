@@ -14,45 +14,65 @@ export default function Footer() {
 
   return (
     <footer className="border-t border-border/60 bg-bg-deep">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
         <div>
           <Logo size="md" muted />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted">
             From design to distribution.
-            The production OS for creators going past their followers.
+            The production OS for BC video creators going past their followers.
           </p>
         </div>
 
         <FooterCol
           title="Pre-Production"
           links={[
-            { href: "/pre-shoot", label: "Brief" },
-            { href: "/production#shotlist", label: "Shot list", soon: true },
+            { href: "/pre-production", label: "Brief generator" },
+            { href: "/pre-production#address", label: "Address research", soon: true },
           ]}
         />
 
         <FooterCol
           title="Production"
           links={[
-            { href: "/production", label: "Set tools" },
-            { href: "/production#broll", label: "B-roll prompts", soon: true },
+            { href: "/production", label: "Shot deck" },
+            { href: "/settings/gear", label: "Gear profile", soon: true },
           ]}
         />
 
         <FooterCol
           title="Post-Production"
           links={[
-            { href: "/post-upload", label: "Caption pack" },
+            { href: "/post-production", label: "Editor's playbook" },
             { href: "/thumbnail-studio", label: "Thumbnail studio" },
-            { href: "/history", label: "History" },
+          ]}
+        />
+
+        <FooterCol
+          title="Mintflow"
+          links={[
+            { href: "/distribution", label: "Distribution" },
+            { href: "/pricing", label: "Pricing" },
+            { href: "/about", label: "About" },
           ]}
         />
       </div>
       <div className="border-t border-border/50">
-        <div className="mx-auto flex max-w-6xl flex-col items-start gap-2 px-5 py-5 text-[12px] text-muted md:flex-row md:items-center md:justify-between">
-          <span className="flex items-center gap-3">
+        <div className="mx-auto flex max-w-6xl flex-col items-start gap-3 px-5 py-5 text-[12px] text-muted md:flex-row md:items-center md:justify-between">
+          <span className="flex flex-wrap items-center gap-3">
             <span>© {new Date().getFullYear()} Mintflow. Built in Victoria, BC.</span>
-            <Link href="/pricing" className="transition hover:text-gold">Pricing</Link>
+            <span className="text-muted/60">·</span>
+            <span className="text-muted/80">
+              Map data ©{" "}
+              <a
+                href="https://www.openstreetmap.org/copyright"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-muted/40 underline-offset-2 hover:text-gold"
+              >
+                OpenStreetMap
+              </a>{" "}
+              contributors, ODbL
+            </span>
           </span>
           <span className="text-muted/70">Quiet content. Loud reach.</span>
         </div>

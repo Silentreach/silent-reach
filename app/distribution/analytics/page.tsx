@@ -44,7 +44,7 @@ function OutcomesBody() {
           Render your first reel and come back here in 3 days to log how it performed.
         </p>
         <Link
-          href="/reel-multiplier"
+          href="/distribution"
           className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gold px-4 py-2 text-sm font-medium text-black hover:bg-gold-light"
         >
           Open Reel Multiplier

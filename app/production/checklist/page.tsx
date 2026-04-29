@@ -225,7 +225,7 @@ function EmptyState() {
         Your shot list lands here, tappable, with a progress bar — designed for the phone in your pocket while you film.
       </p>
       <div className="mt-5 inline-flex items-center gap-2">
-        <Link href="/pre-shoot" className="inline-flex items-center gap-1.5 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-black transition hover:bg-gold-light">
+        <Link href="/pre-production" className="inline-flex items-center gap-1.5 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-black transition hover:bg-gold-light">
           <Sparkles className="h-3.5 w-3.5" /> Generate a brief
         </Link>
       </div>

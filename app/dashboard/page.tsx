@@ -66,7 +66,7 @@ export default function DashboardPage() {
   const onboarding = [
     { done: voiceCount > 0,       label: "Voice samples saved",  href: "/settings/voice",     hint: `${voiceCount}/3 minimum for best results` },
     { done: hasBrand,             label: "Brand kit set",        href: "/settings/brand-kit", hint: "Brand name + colors" },
-    { done: items.length > 0,     label: "First brief or pack",  href: "/pre-shoot",          hint: "Generate your first" },
+    { done: items.length > 0,     label: "First brief or pack",  href: "/pre-production",          hint: "Generate your first" },
     { done: librarySize > 0,      label: "First saved hook",     href: "/library",            hint: "Bookmark a hook from any brief" },
     { done: outcomes.length > 0,  label: "First outcome logged", href: "/history",            hint: "Mark a pack as shipped + reach" },
   ];

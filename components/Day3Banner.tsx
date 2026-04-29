@@ -77,7 +77,7 @@ export default function Day3Banner() {
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
-          href={`/reels/outcomes?focus=${focus.id}`}
+          href={`/distribution/analytics?focus=${focus.id}`}
           className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-medium text-black hover:bg-emerald-400"
         >
           Tell Mintflow how it did
@@ -100,7 +100,7 @@ export default function Day3Banner() {
       {rest.length > 0 && (
         <div className="mt-3 text-[11px] text-muted">
           + {rest.length} other reel{rest.length === 1 ? "" : "s"} waiting for outcome data.{" "}
-          <Link href="/reels/outcomes" className="text-emerald-300 hover:underline">View all →</Link>
+          <Link href="/distribution/analytics" className="text-emerald-300 hover:underline">View all →</Link>
         </div>
       )}
     </div>

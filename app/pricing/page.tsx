@@ -25,7 +25,7 @@ const PLANS: Plan[] = [
     cadence: "forever",
     blurb: "Get the workflow into your hands. Real outputs. Real downloads. Mintflow watermark on shared assets.",
     cta: "Start free",
-    href: "/pre-shoot",
+    href: "/pre-production",
     features: [
       { label: "5 Pre-Shoot briefs / month",            included: true },
       { label: "5 Post-Upload caption packs / month",   included: true },
@@ -43,7 +43,7 @@ const PLANS: Plan[] = [
     cadence: "per month",
     blurb: "For solo pros who ship every week. Unlimited generations, no watermarks, your brand kit baked in.",
     cta: "Start 14-day trial",
-    href: "/pre-shoot",
+    href: "/pre-production",
     featured: true,
     features: [
       { label: "Unlimited briefs + caption packs",      included: true },
@@ -229,7 +229,7 @@ export default function PricingPage() {
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
-              href="/pre-shoot"
+              href="/pre-production"
               className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-sm font-semibold text-black transition hover:bg-gold-light"
             >
               Start free

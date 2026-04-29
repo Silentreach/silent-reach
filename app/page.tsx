@@ -43,7 +43,7 @@ export default function Home() {
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row animate-fade-up">
             <Link
-              href="/pre-shoot"
+              href="/pre-production"
               className="group inline-flex items-center gap-2 rounded-full bg-gold px-5 py-3 text-sm font-semibold text-black transition hover:bg-gold-light"
             >
               Start free
@@ -102,7 +102,7 @@ export default function Home() {
               num="01"
               title="Pre-Production"
               kicker="Design the shoot"
-              href="/pre-shoot"
+              href="/pre-production"
               cta="Start a brief"
               description="A pasted concept becomes a hook, a shot list, three title options, a thumbnail direction, and a Victoria-specific relevance angle — before you pick up a camera."
               tools={[
@@ -129,7 +129,7 @@ export default function Home() {
               num="03"
               title="Post-Production"
               kicker="Ship to every surface"
-              href="/post-upload"
+              href="/post-production"
               cta="Generate a pack"
               description="One YouTube URL becomes IG/FB/LinkedIn captions, five title variants, hook rewrites, chapter markers, three shareable clips, and a thumbnail that travels."
               tools={[
@@ -218,7 +218,7 @@ export default function Home() {
           </div>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 text-sm sm:flex-row">
             <span className="text-muted">Or jump straight in:</span>
-            <Link href="/pre-shoot" className="text-gold transition hover:text-gold-light">
+            <Link href="/pre-production" className="text-gold transition hover:text-gold-light">
               Start a brief →
             </Link>
             <span className="hidden text-muted sm:inline">·</span>

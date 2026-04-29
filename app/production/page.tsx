@@ -104,14 +104,14 @@ export default function ProductionPage() {
               </div>
               <div className="flex flex-shrink-0 flex-col gap-2">
                 <Link
-                  href="/pre-shoot"
+                  href="/pre-production"
                   className="inline-flex items-center justify-center gap-1.5 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light"
                 >
                   Open a brief
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
                 <Link
-                  href="/post-upload"
+                  href="/post-production"
                   className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border-strong px-5 py-2.5 text-sm text-text transition hover:border-gold/60 hover:text-gold"
                 >
                   Generate a pack

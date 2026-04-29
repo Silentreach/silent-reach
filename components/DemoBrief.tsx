@@ -247,7 +247,7 @@ export default function DemoBrief() {
                       Design this thumbnail
                     </Link>
                     <Link
-                      href="/pre-shoot"
+                      href="/pre-production"
                       className="inline-flex items-center gap-1.5 rounded-full bg-gold px-5 py-2 text-sm font-semibold text-black transition hover:bg-gold-light"
                     >
                       Try it on your concept

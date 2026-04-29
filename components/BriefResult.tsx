@@ -239,7 +239,7 @@ export default function BriefResult({ output, itemId }: { output: PreShootOutput
                 Design the thumbnail in Studio
               </Link>
               <Link
-                href="/post-upload"
+                href="/post-production"
                 className="inline-flex items-center gap-1.5 rounded-full border border-border-strong bg-bg px-4 py-2 text-sm text-text transition hover:border-gold/60 hover:text-gold"
               >
                 <Send className="h-3.5 w-3.5" />
