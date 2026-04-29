@@ -136,11 +136,12 @@ function heroShotBlock(heroShot?: string): string {
 }
 
 function bannedPhrasesBlock(): string {
-  return "\n\nBANNED PHRASES (do NOT use any of these or close paraphrases): " +
+  return "\n\nBANNED PHRASES (do NOT use ANY of these in ANY context, including descriptive uses like 'walkable retail' or 'walkable corridor'): " +
     "stunning, elevated, boasts, nestled, your forever home, must-see, imagine yourself, sun-drenched, " +
-    "walkable, walking distance, moments from, close to amenities, minutes to, steps away, perfect family home, " +
+    "walkable (in any compound — say 'X meters via [street name]' instead), walking distance, moments from, close to amenities, minutes to, steps away, perfect family home, " +
     "dream home, won't last. " +
-    "Replace abstract claims with concrete numbers, distances, and place names.";
+    "Replace EVERY abstract claim with a concrete number + named place + how-to-get-there. " +
+    "If you catch yourself reaching for 'walkable', instead say 'X meters via [street name]'.";
 }
 
 function bridgeRealEstate(inputs: RealEstateInputs, addressOverride?: string, enrichment?: BridgeEnrichment): BridgeOutput {
