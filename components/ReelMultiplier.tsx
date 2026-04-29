@@ -1485,24 +1485,6 @@ function DesignedThumbPreview({
   );
 }
 
-function FrameAt({ sourceUrl, timeSec }: { sourceUrl: string | null; timeSec: number }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  if (!sourceUrl) return <div className="grid h-full w-full place-items-center bg-bg-deep text-xs text-muted">no preview</div>;
-  return (
-    <video ref={ref} src={sourceUrl} muted preload="metadata" className="h-full w-full object-cover"
-      onLoadedMetadata={(e) => { try { (e.currentTarget as HTMLVideoElement).currentTime = Math.max(0.05, timeSec); } catch {} }} />
-  );
-}
-
-function ExtLink({ href, label }: { href: string; label: string }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 rounded-full border border-border-strong bg-bg px-2.5 py-1 text-xs text-muted transition hover:border-gold/60 hover:text-gold">
-      {label} <ExternalLink className="h-3 w-3" />
-    </a>
-  );
-}
-
 function fmtSec(s: number): string {
   const m = Math.floor(s / 60);
   const r = Math.floor(s % 60);
