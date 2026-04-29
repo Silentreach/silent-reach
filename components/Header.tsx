@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Logo from "@/components/Logo";
+import UserMenu from "@/components/UserMenu";
 
 interface NavItem {
   href: string;
@@ -57,12 +58,7 @@ export default function Header() {
           })}
         </nav>
 
-        <Link
-          href="/login"
-          className="rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1.5 text-[13px] font-medium text-gold transition hover:bg-gold/15"
-        >
-          Sign in
-        </Link>
+        <UserMenu />
       </div>
 
       {/* Mobile pillar strip — keeps the four-pillar story visible on phones */}
