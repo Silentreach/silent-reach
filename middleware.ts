@@ -37,6 +37,8 @@ const PUBLIC_ROUTES_PREFIX = [
   "/invite",          // /invite/[code] — invite landing page
   "/api/auth",        // /api/auth/request-magic-link, /api/auth/signout, etc.
   "/api/waitlist",    // pricing-page email capture (logged-out)
+  "/api/enrichment",  // homepage wedge — geocode + nearby teaser (free APIs,
+                      // cached 30 days; safe to expose to anonymous traffic).
 ];
 
 function isPublicRoute(pathname: string): boolean {
@@ -60,7 +62,13 @@ export async function middleware(request: NextRequest) {
     }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    if (pathname !== "/") url.searchParams.set("redirect", pathname);
+    // Preserve the full destination including query string (e.g. ?address=...
+    // from the homepage wedge), so post-login routes the user to the page
+    // they actually wanted, with their context intact.
+    if (pathname !== "/") {
+      const dest = pathname + (request.nextUrl.search || "");
+      url.searchParams.set("redirect", dest);
+    }
     return NextResponse.redirect(url);
   }
 

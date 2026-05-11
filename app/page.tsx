@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import EmailCapture from "@/components/EmailCapture";
 import DemoBrief from "@/components/DemoBrief";
+import HomeAddressWedge from "@/components/HomeAddressWedge";
 
 export default function Home() {
   return (
@@ -40,19 +41,16 @@ export default function Home() {
             One studio for the brief, the shoot, the cut, the cover, and the captions.
           </p>
 
-          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row animate-fade-up">
-            <Link
-              href="/pre-production"
-              className="group inline-flex items-center gap-2 rounded-full bg-gold px-5 py-3 text-sm font-semibold text-black transition hover:bg-gold-light"
-            >
-              Start free
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          {/* Wedge: paste a BC address, see the magic without signing in. */}
+          <HomeAddressWedge />
+
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[12px] text-muted animate-fade-up">
+            <Link href="/pricing" className="transition hover:text-gold">
+              See pricing →
             </Link>
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-2 rounded-full border border-border-strong px-5 py-3 text-sm text-text transition hover:border-gold/60 hover:text-gold"
-            >
-              See pricing
+            <span className="hidden text-muted/40 sm:inline">·</span>
+            <Link href="/about" className="transition hover:text-gold">
+              The founder story →
             </Link>
           </div>
 

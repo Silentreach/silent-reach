@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import BriefResult from "@/components/BriefResult";
 import VoiceNudge from "@/components/VoiceNudge";
 import NichePicker from "@/components/preProduction/NichePicker";
@@ -16,13 +17,42 @@ import type { PreShootInput, PreShootOutput } from "@/types";
 type Stage = "pick" | "form" | "loading" | "result" | "error";
 
 export default function PreProductionPage() {
-  const [stage, setStage] = useState<Stage>("pick");
+  // useSearchParams must be inside a Suspense boundary for the App Router.
+  return (
+    <Suspense fallback={null}>
+      <PreProductionPageInner />
+    </Suspense>
+  );
+}
+
+function PreProductionPageInner() {
+  const searchParams = useSearchParams();
+  const wedgeAddress = searchParams.get("address");
+
+  const [stage, setStage] = useState<Stage>(wedgeAddress ? "form" : "pick");
   const [loadingPhase, setLoadingPhase] = useState<"thinking" | "geocoded" | "synthesizing">("thinking");
-  const [niche, setNiche] = useState<Niche | null>(null);
+  // If the homepage wedge passed an address, default to real_estate — the
+  // primary niche tied to address-driven workflow. User can hit "Back" to
+  // pick construction or general instead.
+  const [niche, setNiche] = useState<Niche | null>(wedgeAddress ? "real_estate" : null);
   const [output, setOutput] = useState<PreShootOutput | null>(null);
   const [legacyInputForHistory, setLegacyInputForHistory] = useState<PreShootInput | null>(null);
   const [lastSubtitle, setLastSubtitle] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Strip the wedge query params from the URL after consumption so a manual
+  // refresh doesn't re-trigger the auto-jump if the user navigates back.
+  useEffect(() => {
+    if (wedgeAddress && typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("address");
+      url.searchParams.delete("lat");
+      url.searchParams.delete("lng");
+      window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    }
+    // run once after mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function pickNiche(n: Niche) {
     setNiche(n);
@@ -124,7 +154,11 @@ export default function PreProductionPage() {
       {stage === "pick" && <NichePicker onPick={pickNiche} />}
 
       {stage === "form" && niche === "real_estate" && (
-        <RealEstateForm onBack={backToPicker} onSubmit={generate} />
+        <RealEstateForm
+          onBack={backToPicker}
+          onSubmit={generate}
+          initialAddress={wedgeAddress ?? undefined}
+        />
       )}
       {stage === "form" && niche === "construction" && (
         <ConstructionForm onBack={backToPicker} onSubmit={generate} />

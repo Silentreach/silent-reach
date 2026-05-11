@@ -71,12 +71,18 @@ export default function RealEstateForm({
   onBack,
   onSubmit,
   submitting,
+  initialAddress,
 }: {
   onBack: () => void;
   onSubmit: (inputs: RealEstateInputs, extras: { geocode: { formattedAddress: string; lat: number; lng: number; neighborhood?: string; postalCode?: string } | null }) => void;
   submitting?: boolean;
+  /** Pre-fill from the homepage wedge or other entry points. */
+  initialAddress?: string;
 }) {
-  const [inputs, setInputs] = useState<RealEstateInputs>(DEFAULTS);
+  const [inputs, setInputs] = useState<RealEstateInputs>({
+    ...DEFAULTS,
+    address: initialAddress ?? DEFAULTS.address,
+  });
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [propertyOpen, setPropertyOpen] = useState(false);
   const [geocode, setGeocode] = useState<{ formattedAddress: string; lat: number; lng: number; neighborhood?: string; postalCode?: string } | null>(null);
