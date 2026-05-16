@@ -15,7 +15,7 @@ let loadingPromise: Promise<FFmpeg> | null = null;
 const CORE_VERSION = "0.12.10";
 const CORE_BASE = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd`;
 
-async function getFFmpeg(): Promise<FFmpeg> {
+export async function getFFmpeg(): Promise<FFmpeg> {
   if (ffmpegInstance) return ffmpegInstance;
   if (loadingPromise) return loadingPromise;
 

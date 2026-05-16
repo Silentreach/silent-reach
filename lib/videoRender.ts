@@ -26,6 +26,34 @@ export type HookBackground = "none" | "pill" | "box";
 export type HookStyle = "stagger" | "typewriter";
 export type LogoKind = "image" | "video";
 
+/* ---------- Captions (Step 1a) ----------
+   A CaptionCue is one displayed phrase with optional word-level timing for
+   active-word highlighting. Cues are usually produced by /api/transcribe
+   from Whisper output, but a caller may also hand-author them. */
+
+export interface CaptionWord {
+  word: string;
+  startSec: number;
+  endSec: number;
+}
+export interface CaptionCue {
+  text: string;
+  startSec: number;
+  endSec: number;
+  words: CaptionWord[];
+}
+export type CaptionPosition = "lower-third" | "center" | "upper-third";
+export interface CaptionStyle {
+  position: CaptionPosition;
+  /** "editorial-serif" | "bold-block" | "handwritten-script" — only editorial-serif is
+   *  wired up in Step 1a. Future steps fill in the rest. */
+  preset: "editorial-serif" | "bold-block" | "handwritten-script";
+  /** Color for the currently-spoken word. Default: brand gold. */
+  activeColor?: string;
+  /** Color for the surrounding non-active words. Default: white. */
+  baseColor?: string;
+}
+
 export interface LogoSource {
   kind: LogoKind;
   /** Data URL for images, object URL for videos */
@@ -48,6 +76,10 @@ export interface RenderOptions {
   includeOutro?: boolean;
   outroDurationSec?: number;          // default 2.0
   fadeOutSec?: number;                // default 1.5
+  /** Burned-in captions (one cue at a time on screen). Empty/undefined = off. */
+  captions?: CaptionCue[];
+  /** Visual presentation for captions. Defaults to editorial-serif / lower-third. */
+  captionStyle?: CaptionStyle;
   /** Optional staged progress: stage label + 0-1 percent within the stage */
   onStage?: (stage: "decoding" | "analyzing" | "rendering" | "finalizing", pct: number) => void;
   onProgress?: (pct: number) => void;
@@ -74,8 +106,15 @@ function resolveHookPosition(p?: HookPosition, platform?: RenderOptions["platfor
 export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   const {
     source, segments, outputAspect, hookLine, musicFile, brandName,
+    captions, captionStyle,
     onProgress,
   } = opts;
+  const effectiveCaptionStyle: CaptionStyle = {
+    position: captionStyle?.position ?? "lower-third",
+    preset: captionStyle?.preset ?? "editorial-serif",
+    activeColor: captionStyle?.activeColor ?? "#D4AF37", // brand gold
+    baseColor: captionStyle?.baseColor ?? "#FFFFFF",
+  };
   if (segments.length === 0) throw new Error("No cut segments provided.");
   const dims = ASPECT_DIMS[outputAspect];
   const hookPos = resolveHookPosition(opts.hookPosition, opts.platform);
@@ -247,6 +286,19 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
         // I11: defense-in-depth truncate to 100 chars max
         const safeHook = hookLine.length > 100 ? hookLine.slice(0, 100) + "…" : hookLine;
         drawAnimatedHook(ctx, safeHook, dims, hookPos, elapsedTotalSec, opts.hookBackground || "none", opts.hookBackgroundColor, opts.hookStyle || "stagger");
+      }
+
+      // Burned-in captions (Step 1a). One cue active at a time; loop is short
+      // since reels have ~10-30 cues. Draws AFTER the hook so an early cue
+      // overlapping the hook would stack visually rather than be obscured.
+      if (captions && captions.length > 0) {
+        for (let ci = 0; ci < captions.length; ci++) {
+          const cue = captions[ci];
+          if (elapsedTotalSec >= cue.startSec - 0.05 && elapsedTotalSec <= cue.endSec + 0.2) {
+            drawAnimatedCaption(ctx, cue, dims, elapsedTotalSec, effectiveCaptionStyle);
+            break;
+          }
+        }
       }
 
       // Visual fadeout in the last fadeOutSec seconds of MAIN (before outro)
@@ -825,6 +877,154 @@ function drawOutroVideo(
     ctx.textBaseline = "top";
     ctx.fillText(brandName.toUpperCase(), dims.w / 2, y + targetH + dims.w * 0.025);
   }
+  ctx.restore();
+}
+
+/* ---------- Burned-in captions (Step 1a) ----------
+   Word-by-word kinetic captions with active-word highlighting. One cue
+   on screen at a time; cue enters with fade+slide, exits with fade. The
+   currently-spoken word renders in the brand gold; surrounding words
+   render in white. Layout is line-wrapped and clamped to a 3-line max
+   so long cues don't drown the frame.
+
+   Editorial-serif preset is the only one wired in Step 1a. The function
+   accepts a style.preset that future steps (1d) will fan out into bold-block
+   and handwritten-script variants. */
+function drawAnimatedCaption(
+  ctx: CanvasRenderingContext2D,
+  cue: CaptionCue,
+  dims: { w: number; h: number },
+  elapsedTotalSec: number,
+  style: CaptionStyle,
+) {
+  const cueDur = Math.max(0.2, cue.endSec - cue.startSec);
+  const t = elapsedTotalSec - cue.startSec; // time within the cue
+
+  // Enter (200 ms) + exit (180 ms) fades. The exit slightly outlasts the cue
+  // end so a brief tail covers the gap to the next cue (or audio sustain).
+  const ENTER = 0.20;
+  const EXIT = 0.18;
+  let opacity = 1;
+  let yOffset = 0;
+  if (t < ENTER) {
+    const k = Math.max(0, t / ENTER);
+    opacity = k;
+    yOffset = (1 - k) * dims.h * 0.012;
+  } else if (t > cueDur - EXIT) {
+    const k = Math.max(0, (t - (cueDur - EXIT)) / EXIT);
+    opacity = 1 - k;
+    yOffset = -k * dims.h * 0.008;
+  }
+  if (opacity <= 0.01) return;
+
+  const padding = Math.round(dims.w * 0.07);
+  const fontSize = Math.round(dims.w * 0.058);
+  const lineH = fontSize * 1.22;
+  const maxW = dims.w - padding * 2;
+
+  ctx.save();
+  // Editorial-serif preset: tighter tracking, heavier weight, a touch of
+  // sentence case. (Future presets will swap font + spacing here.)
+  ctx.font = `700 ${fontSize}px "Inter Tight", Inter, Helvetica, Arial, sans-serif`;
+  ctx.textBaseline = "top";
+
+  // Layout: word-wrap with per-word x positions retained so we can paint
+  // each word with its own color + opacity.
+  const wordCount = cue.words.length;
+  const rawWords = wordCount > 0
+    ? cue.words.map((w) => w.word)
+    : cue.text.split(/\s+/).filter(Boolean);
+
+  const spaceW = ctx.measureText(" ").width;
+  type LaidWord = { word: string; lineIdx: number; x: number; idxInText: number };
+  const laid: LaidWord[] = [];
+  let lineIdx = 0;
+  let xCursor = 0;
+  const MAX_LINES = 3;
+  for (let i = 0; i < rawWords.length; i++) {
+    const w = rawWords[i];
+    const wW = ctx.measureText(w).width;
+    const isFirstOnLine = xCursor === 0;
+    const advance = isFirstOnLine ? wW : spaceW + wW;
+    if (!isFirstOnLine && xCursor + advance > maxW) {
+      if (lineIdx + 1 >= MAX_LINES) break;
+      lineIdx++;
+      xCursor = 0;
+      laid.push({ word: w, lineIdx, x: 0, idxInText: i });
+      xCursor = wW;
+    } else {
+      const x = isFirstOnLine ? 0 : xCursor + spaceW;
+      laid.push({ word: w, lineIdx, x, idxInText: i });
+      xCursor = x + wW;
+    }
+  }
+  if (laid.length === 0) {
+    ctx.restore();
+    return;
+  }
+  const numLines = lineIdx + 1;
+  const blockH = numLines * lineH;
+
+  // Position: lower-third / center / upper-third
+  let baseTop: number;
+  if (style.position === "upper-third") {
+    baseTop = Math.round(dims.h * 0.14);
+  } else if (style.position === "center") {
+    baseTop = Math.round((dims.h - blockH) / 2);
+  } else {
+    // lower-third: above the platform-safe area (IG caption gradient zone).
+    baseTop = Math.round(dims.h * 0.74) - blockH;
+  }
+  const top = baseTop + yOffset;
+
+  // Soft vertical gradient band behind the caption block so the type stays
+  // legible on any background — even pure-white kitchen reno shots.
+  const bandPadV = Math.round(fontSize * 0.95);
+  const bandTop = Math.max(0, top - bandPadV);
+  const bandH = blockH + bandPadV * 2.1;
+  const grad = ctx.createLinearGradient(0, bandTop, 0, bandTop + bandH);
+  grad.addColorStop(0, "rgba(0,0,0,0)");
+  grad.addColorStop(0.45, `rgba(0,0,0,${(0.55 * opacity).toFixed(3)})`);
+  grad.addColorStop(0.55, `rgba(0,0,0,${(0.55 * opacity).toFixed(3)})`);
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, bandTop, dims.w, bandH);
+
+  // Per-word draw with active-word highlight.
+  const baseColor = style.baseColor ?? "#FFFFFF";
+  const activeColor = style.activeColor ?? "#D4AF37";
+  for (const lw of laid) {
+    const wordTiming = cue.words[lw.idxInText];
+    let isActive = false;
+    if (wordTiming) {
+      isActive =
+        elapsedTotalSec >= wordTiming.startSec - 0.02 &&
+        elapsedTotalSec <= wordTiming.endSec + 0.06;
+    }
+
+    const wordX = padding + lw.x;
+    const wordY = top + lw.lineIdx * lineH;
+
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.shadowColor = "rgba(0,0,0,0.95)";
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 3;
+
+    if (isActive) {
+      // Subtle pop on the active word: 1.04x scale around its center, gold fill.
+      const wordW = ctx.measureText(lw.word).width;
+      ctx.translate(wordX + wordW / 2, wordY + fontSize / 2);
+      ctx.scale(1.04, 1.04);
+      ctx.translate(-(wordX + wordW / 2), -(wordY + fontSize / 2));
+      ctx.fillStyle = activeColor;
+    } else {
+      ctx.fillStyle = baseColor;
+    }
+    ctx.fillText(lw.word, wordX, wordY);
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 

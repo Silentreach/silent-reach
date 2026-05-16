@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getBrandKit } from "@/lib/userContext";
-import { renderReel, downloadBlob } from "@/lib/videoRender";
+import { renderReel, downloadBlob, type CaptionCue } from "@/lib/videoRender";
+import { extractAudioWav } from "@/lib/audioExtract";
 import { computeSubjectZone, inferTransition, type SubjectZone, type TransitionType } from "@/lib/frameAnalysis";
 import { createReel } from "@/lib/db/reels";
 import MusicBrowser, { type PixabayTrack } from "@/components/MusicBrowser";
@@ -1021,6 +1022,16 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
   const [renderError, setRenderError] = useState<string | null>(null);
   const [hookPos, setHookPos] = useState<"auto" | "top" | "bottom">("auto");
   const [includeOutro, setIncludeOutro] = useState(true);
+
+  // Step 1a: burned-in captions. Default ON for the realtor niche — most listing
+  // reels are watched muted, captions do 70%+ of the storytelling. Cues are
+  // cached per source-file size so re-renders don't re-transcribe.
+  const [captionsEnabled, setCaptionsEnabled] = useState(true);
+  const [captionCues, setCaptionCues] = useState<CaptionCue[] | null>(null);
+  const [captionsTranscribing, setCaptionsTranscribing] = useState(false);
+  const [captionsError, setCaptionsError] = useState<string | null>(null);
+  // Reset cached cues whenever the source file changes.
+  const cachedCuesForFileRef = useRef<string | null>(null);
   const [hookBg, setHookBg] = useState<"none" | "pill" | "box">("none");
 
   // User-editable overrides — generator → tool. Default to AI's suggestions.
@@ -1057,6 +1068,38 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
     if (!sourceFile || editedCuts.length === 0) return;
     setRenderState("rendering"); setRenderPct(0); setRenderError(null); setRenderPhase("render");
     try {
+      // Step 1a: transcribe BEFORE render if captions are on and we don't have
+      // cached cues for this source file. We use file size+name as a cheap
+      // cache key — same file, same cues.
+      let cues: CaptionCue[] | null = captionCues;
+      const fileKey = `${sourceFile.name}::${sourceFile.size}`;
+      const cacheStale = cachedCuesForFileRef.current !== fileKey;
+      if (captionsEnabled && (cues === null || cacheStale)) {
+        try {
+          setCaptionsTranscribing(true);
+          setCaptionsError(null);
+          const { blob: wav } = await extractAudioWav(sourceFile);
+          const fd = new FormData();
+          fd.append("file", wav, "audio.wav");
+          const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+          if (!r.ok) {
+            const txt = await r.text().catch(() => "");
+            throw new Error(txt || `Transcription failed (${r.status})`);
+          }
+          const data = (await r.json()) as { cues: CaptionCue[] };
+          cues = data.cues || [];
+          setCaptionCues(cues);
+          cachedCuesForFileRef.current = fileKey;
+        } catch (err) {
+          // Non-fatal: render proceeds without captions and we surface a hint.
+          setCaptionsError(err instanceof Error ? err.message : "Couldn't transcribe audio.");
+          cues = null;
+        } finally {
+          setCaptionsTranscribing(false);
+        }
+      } else if (!captionsEnabled) {
+        cues = null;
+      }
       const kit = getBrandKit();
       const outputAspect = "9:16" as const;
       // Pick the logo source: inline upload wins, else Brand Kit (always image), else none
@@ -1101,6 +1144,8 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
         includeOutro: includeOutro && !!logo,
         outroDurationSec: 2.0,
         fadeOutSec: 1.5,
+        captions: cues || undefined,
+        // captionStyle uses sensible defaults (editorial-serif, lower-third, gold/white).
         onStage: (stage, p) => setRenderStage(stage),
         onProgress: (p) => setRenderPct(p),
       });
@@ -1206,14 +1251,35 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                 <input type="checkbox" checked={includeOutro} onChange={(e) => setIncludeOutro(e.target.checked)} className="!h-3 !w-3 !rounded !border !border-border-strong" />
                 Logo outro
               </label>
+              <label className="flex items-center gap-1.5 text-muted" title="Word-by-word captions burned into the reel. ~$0.01/render via OpenAI Whisper.">
+                <input
+                  type="checkbox"
+                  checked={captionsEnabled}
+                  onChange={(e) => {
+                    setCaptionsEnabled(e.target.checked);
+                    setCaptionsError(null);
+                  }}
+                  className="!h-3 !w-3 !rounded !border !border-border-strong"
+                />
+                Burn in captions
+                {captionsTranscribing && <Loader2 className="h-3 w-3 animate-spin text-gold" />}
+                {captionCues && captionCues.length > 0 && !captionsTranscribing && (
+                  <span className="text-[10px] text-gold/80">· {captionCues.length} cues ready</span>
+                )}
+              </label>
             </div>
+            {captionsError && (
+              <div className="mt-2 text-[11px] text-amber-400/80">
+                Caption warning: {captionsError} — reel rendered without captions.
+              </div>
+            )}
           </div>
           <button
             onClick={onRender}
             disabled={renderState === "rendering" || !sourceFile || editedCuts.length === 0 || !editedHook.trim() || (musicResetCount > 0 && !musicFile)}
             className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gold-light disabled:opacity-60"
           >
-            {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> {renderPhase === "convert" ? "Converting" : stageLabel(renderStage)} {(renderPct * 100).toFixed(0)}%</>}
+            {renderState === "rendering" && <><Loader2 className="h-4 w-4 animate-spin" /> {captionsTranscribing ? "Transcribing audio…" : renderPhase === "convert" ? "Converting" : stageLabel(renderStage)} {!captionsTranscribing && `${(renderPct * 100).toFixed(0)}%`}</>}
             {renderState === "ready" && <><Check className="h-4 w-4" /> Preview ready</>}
             {renderState === "error" && <><Download className="h-4 w-4" /> Try again</>}
             {renderState === "idle" && <><Download className="h-4 w-4" /> Render preview</>}
