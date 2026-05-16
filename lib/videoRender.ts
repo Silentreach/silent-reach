@@ -133,9 +133,13 @@ export async function renderReel(opts: RenderOptions): Promise<RenderResult> {
   video.crossOrigin = "anonymous";
   video.playsInline = true;
   video.preload = "auto";
-  // Mute the element so it doesn't double-output to speakers — audio is routed through Web Audio
+  // Audio routing: createMediaElementSource() reroutes the element's audio
+  // exclusively into the Web Audio graph (Chrome/Firefox) — no speaker output.
+  // The element's volume IS the level captured by the graph, so it MUST be 1.0
+  // or the recording will be silent. (Earlier value of 0 was the root cause
+  // of every "rendered reel has no audio" report.)
   video.muted = false;
-  video.volume = 0;
+  video.volume = 1;
   await new Promise<void>((res, rej) => {
     video.onloadedmetadata = () => res();
     video.onerror = () => rej(new Error("Couldn’t read this video file."));
@@ -430,13 +434,15 @@ function drawFrame(
   }
 
   // Cinematic color grade — applied as canvas filter (single GPU pass on most browsers).
-  // saturate(108%): subtle pop. contrast(105%): gentle S-curve approximation.
-  // brightness(101%): tiny lift. These are conservative — pro reels stay subtle.
-  ctx.filter = "saturate(108%) contrast(105%) brightness(101%)";
+  // Dialed down from previous values: the prior 108/105/101 stack was amplifying
+  // high-frequency noise in low-light footage, producing a visible shimmer when
+  // re-encoded by MediaRecorder. New values are imperceptible-on-clean / safer-on-noise.
+  ctx.filter = "saturate(103%) contrast(102%)";
   ctx.drawImage(video, sx, sy, scw, sch, 0, 0, dims.w, dims.h);
   ctx.filter = "none";
 
-  // Radial vignette: cinematic darkening at the corners. Anchored to dims center.
+  // Radial vignette: cinematic darkening at the corners. Reduced strength so it
+  // doesn't compound with compression noise in dark areas.
   drawVignette(ctx, dims);
 }
 
@@ -450,7 +456,9 @@ function drawVignette(ctx: CanvasRenderingContext2D, dims: { w: number; h: numbe
     const r = Math.hypot(cx, cy);
     const grad = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r);
     grad.addColorStop(0, "rgba(0,0,0,0)");
-    grad.addColorStop(1, "rgba(0,0,0,0.32)");
+    // Softened from 0.32 — too aggressive for daylight realtor footage and
+    // it amplified compression noise in the darker corners.
+    grad.addColorStop(1, "rgba(0,0,0,0.18)");
     _vignetteCache = { w: dims.w, h: dims.h, grad };
   }
   if (_vignetteCache.grad) {
@@ -917,15 +925,18 @@ function drawAnimatedCaption(
   }
   if (opacity <= 0.01) return;
 
-  const padding = Math.round(dims.w * 0.07);
-  const fontSize = Math.round(dims.w * 0.058);
-  const lineH = fontSize * 1.22;
+  const padding = Math.round(dims.w * 0.065);
+  // Larger than the hook overlay so caption presence reads at thumbnail scale —
+  // realtor reels are mostly watched at IG/TikTok preview sizes where small
+  // type disappears. 0.072 ≈ 78 px at 1080-wide canvas.
+  const fontSize = Math.round(dims.w * 0.072);
+  const lineH = fontSize * 1.18;
   const maxW = dims.w - padding * 2;
 
   ctx.save();
-  // Editorial-serif preset: tighter tracking, heavier weight, a touch of
-  // sentence case. (Future presets will swap font + spacing here.)
-  ctx.font = `700 ${fontSize}px "Inter Tight", Inter, Helvetica, Arial, sans-serif`;
+  // Editorial-serif preset: heavy weight Inter Tight, slight letter compression
+  // via font-stretch (where supported). Future presets swap font + spacing here.
+  ctx.font = `800 ${fontSize}px "Inter Tight", Inter, Helvetica, Arial, sans-serif`;
   ctx.textBaseline = "top";
 
   // Layout: word-wrap with per-word x positions retained so we can paint
@@ -990,38 +1001,60 @@ function drawAnimatedCaption(
   ctx.fillStyle = grad;
   ctx.fillRect(0, bandTop, dims.w, bandH);
 
-  // Per-word draw with active-word highlight.
+  // Per-word draw with active-word highlight + impact animation.
+  // The active word pops with a bigger scale + gold glow halo so it reads as
+  // intentional kinetic typography — same family as Submagic / Captions.ai
+  // styled output, tuned for premium realtor reels.
   const baseColor = style.baseColor ?? "#FFFFFF";
   const activeColor = style.activeColor ?? "#D4AF37";
   for (const lw of laid) {
     const wordTiming = cue.words[lw.idxInText];
     let isActive = false;
+    let activePhase = 0; // 0 at start, 1 at end of word's spoken window
     if (wordTiming) {
-      isActive =
-        elapsedTotalSec >= wordTiming.startSec - 0.02 &&
-        elapsedTotalSec <= wordTiming.endSec + 0.06;
+      const wordDur = Math.max(0.05, wordTiming.endSec - wordTiming.startSec);
+      const wordT = elapsedTotalSec - wordTiming.startSec;
+      isActive = wordT >= -0.02 && wordT <= wordDur + 0.06;
+      activePhase = Math.min(1, Math.max(0, wordT / wordDur));
     }
 
     const wordX = padding + lw.x;
     const wordY = top + lw.lineIdx * lineH;
+    const wordW = ctx.measureText(lw.word).width;
 
     ctx.save();
     ctx.globalAlpha = opacity;
-    ctx.shadowColor = "rgba(0,0,0,0.95)";
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 3;
 
     if (isActive) {
-      // Subtle pop on the active word: 1.04x scale around its center, gold fill.
-      const wordW = ctx.measureText(lw.word).width;
+      // Pop ease: quick scale-up at word start (0-150 ms), gentle settle.
+      const POP_DUR = 0.15;
+      const popT = Math.min(1, Math.max(0, (elapsedTotalSec - wordTiming!.startSec) / POP_DUR));
+      const popEase = 1 - Math.pow(1 - popT, 3); // easeOutCubic
+      const scale = 1 + 0.16 * popEase; // 1.0 → 1.16
+
+      // Gold glow halo behind the active word — draws first, under the text.
+      ctx.save();
       ctx.translate(wordX + wordW / 2, wordY + fontSize / 2);
-      ctx.scale(1.04, 1.04);
+      ctx.scale(scale, scale);
       ctx.translate(-(wordX + wordW / 2), -(wordY + fontSize / 2));
+      ctx.shadowColor = activeColor;
+      ctx.shadowBlur = 36;
+      ctx.shadowOffsetY = 0;
       ctx.fillStyle = activeColor;
+      // Two-pass fill so the glow stacks (canvas shadow only renders once per
+      // fillText call; second pass intensifies the halo without blowing out type).
+      ctx.fillText(lw.word, wordX, wordY);
+      ctx.shadowBlur = 18;
+      ctx.fillText(lw.word, wordX, wordY);
+      ctx.restore();
     } else {
+      // Inactive words: white with a soft drop-shadow for legibility on any bg.
+      ctx.shadowColor = "rgba(0,0,0,0.95)";
+      ctx.shadowBlur = 16;
+      ctx.shadowOffsetY = 3;
       ctx.fillStyle = baseColor;
+      ctx.fillText(lw.word, wordX, wordY);
     }
-    ctx.fillText(lw.word, wordX, wordY);
     ctx.restore();
   }
 

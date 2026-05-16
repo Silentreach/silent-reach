@@ -1040,7 +1040,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
   const [musicResetCount, setMusicResetCount] = useState(0); // bumps to remount MusicBrowser → fresh auto-pick
   const [previousTrackIds, setPreviousTrackIds] = useState<number[]>([]); // tracks ALREADY picked on this platform — exclude them on re-roll
   const [cutsExpanded, setCutsExpanded] = useState(false);
-  const [editedCuts, setEditedCuts] = useState<{ startSec: number; endSec: number; reason?: string }[]>(
+  const [editedCuts, setEditedCuts] = useState<{ startSec: number; endSec: number; reason?: string; framing?: "left" | "center" | "right" }[]>(
     pkg.cutMarkers.map((c) => ({ startSec: c.startSec, endSec: c.endSec, reason: c.reason }))
   );
 
@@ -1116,10 +1116,21 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
         const midpoint = (c.startSec + c.endSec) / 2;
         const closest = pickClosestFrame(extractedFrames, midpoint);
         const prev = i > 0 ? pickClosestFrame(extractedFrames, (editedCuts[i - 1].startSec + editedCuts[i - 1].endSec) / 2) : undefined;
+        // Manual framing override wins over auto-detected subject zone. This
+        // exists because auto-detection misses faces on dim / cluttered backgrounds
+        // and leaves the realtor anchored off to one side after the 16:9 → 9:16
+        // crop. Left/Right shift the crop window 25 % toward that edge.
+        let cropBiasX: number;
+        if (c.framing === "left") cropBiasX = 0.30;
+        else if (c.framing === "right") cropBiasX = 0.70;
+        else if (c.framing === "center") cropBiasX = 0.50;
+        else cropBiasX = closest?.subjectZone?.confidence && closest.subjectZone.confidence > 0.3
+          ? closest.subjectZone.centerX
+          : 0.5;
         return {
           startSec: c.startSec,
           endSec: c.endSec,
-          cropBiasX: closest?.subjectZone?.confidence && closest.subjectZone.confidence > 0.3 ? closest.subjectZone.centerX : 0.5,
+          cropBiasX,
           cropBiasY: closest?.subjectZone?.confidence && closest.subjectZone.confidence > 0.3 ? closest.subjectZone.centerY : 0.5,
           transitionIn: "dip" as const, // whip/crossfade not yet implemented in renderer
         };
@@ -1251,7 +1262,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                 <input type="checkbox" checked={includeOutro} onChange={(e) => setIncludeOutro(e.target.checked)} className="!h-3 !w-3 !rounded !border !border-border-strong" />
                 Logo outro
               </label>
-              <label className="flex items-center gap-1.5 text-muted" title="Word-by-word captions burned into the reel. ~$0.01/render via OpenAI Whisper.">
+              <label className="flex items-center gap-1.5 text-muted" title="Word-by-word captions burned into the reel. Source needs voice-over or narration. ~$0.01/render via OpenAI Whisper.">
                 <input
                   type="checkbox"
                   checked={captionsEnabled}
@@ -1262,9 +1273,13 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                   className="!h-3 !w-3 !rounded !border !border-border-strong"
                 />
                 Burn in captions
+                <span className="text-[10px] text-muted/70">(needs voice in source)</span>
                 {captionsTranscribing && <Loader2 className="h-3 w-3 animate-spin text-gold" />}
                 {captionCues && captionCues.length > 0 && !captionsTranscribing && (
                   <span className="text-[10px] text-gold/80">· {captionCues.length} cues ready</span>
+                )}
+                {captionCues && captionCues.length === 0 && !captionsTranscribing && (
+                  <span className="text-[10px] text-amber-400/80">· no speech detected</span>
                 )}
               </label>
             </div>
@@ -1486,7 +1501,7 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
             {cutsExpanded && (
               <div className="mt-3 space-y-2">
                 {editedCuts.map((c, i) => (
-                  <div key={i} className="flex items-center gap-2 font-mono text-xs">
+                  <div key={i} className="flex flex-wrap items-center gap-2 font-mono text-xs">
                     <span className="w-5 text-muted">#{i + 1}</span>
                     <button onClick={() => nudgeCut(i, "startSec", -0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move start earlier">−</button>
                     <span className="w-12 text-center text-gold">{fmtSec(c.startSec)}</span>
@@ -1496,6 +1511,28 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
                     <span className="w-12 text-center text-gold">{fmtSec(c.endSec)}</span>
                     <button onClick={() => nudgeCut(i, "endSec", 0.5)} className="rounded bg-bg px-1.5 py-0.5 text-muted hover:text-text" aria-label="Move end later">+</button>
                     <span className="text-[10px] text-muted">({Math.max(0, c.endSec - c.startSec).toFixed(1)}s)</span>
+
+                    {/* Framing override — drags the 9:16 crop window L / C / R when
+                        the auto subject detection misses (most common on realtor
+                        videos with the realtor off to one side of a wide shot). */}
+                    <div className="ml-1 flex items-center gap-0.5 rounded border border-border bg-bg/60 px-1 py-0.5 text-[10px]">
+                      <span className="mr-0.5 text-muted/70">crop</span>
+                      {(["left", "center", "right"] as const).map((f) => {
+                        const isActive = c.framing === f;
+                        return (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => setEditedCuts((prev) => prev.map((x, idx) => idx === i ? { ...x, framing: isActive ? undefined : f } : x))}
+                            className={`rounded px-1.5 py-0.5 transition ${isActive ? "bg-gold text-black" : "text-muted hover:text-gold"}`}
+                            title={isActive ? `Clear framing (use auto)` : `Anchor crop ${f}`}
+                          >
+                            {f === "left" ? "L" : f === "center" ? "C" : "R"}
+                          </button>
+                        );
+                      })}
+                    </div>
+
                     {editedCuts.length > 1 && (
                       <button onClick={() => deleteCut(i)} className="ml-auto text-[10px] text-muted hover:text-amber-400" title="Remove this cut">remove</button>
                     )}
