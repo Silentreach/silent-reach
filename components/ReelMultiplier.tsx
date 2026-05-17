@@ -1069,8 +1069,10 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
     setRenderState("rendering"); setRenderPct(0); setRenderError(null); setRenderPhase("render");
     try {
       // Step 1a: transcribe BEFORE render if captions are on and we don't have
-      // cached cues for this source file. We use file size+name as a cheap
-      // cache key — same file, same cues.
+      // cached cues for this source file. EVERY async step has a hard timeout
+      // so a failed Whisper key, slow ffmpeg.wasm download, or upstream stall
+      // cannot block the render — we just ship without captions and surface
+      // the reason in the UI.
       let cues: CaptionCue[] | null = captionCues;
       const fileKey = `${sourceFile.name}::${sourceFile.size}`;
       const cacheStale = cachedCuesForFileRef.current !== fileKey;
@@ -1078,21 +1080,48 @@ function PackageCard({ pkg, sourceUrl, sourceFile, customLogo, extractedFrames, 
         try {
           setCaptionsTranscribing(true);
           setCaptionsError(null);
-          const { blob: wav } = await extractAudioWav(sourceFile);
+
+          // (a) Audio extract with a 60 s wall — ffmpeg.wasm cold start can be
+          // ~15 s on a slow connection, plus encode time scales with length.
+          const extractDeadline = new Promise<never>((_, rej) =>
+            setTimeout(() => rej(new Error("Audio extract took longer than 60 s — skipping captions.")), 60_000),
+          );
+          const { blob: wav } = await Promise.race([
+            extractAudioWav(sourceFile),
+            extractDeadline,
+          ]);
+
+          // (b) Transcription POST with a 90 s wall — Whisper itself usually
+          // returns in 10-20 s but we leave headroom for cold-edge cases.
           const fd = new FormData();
           fd.append("file", wav, "audio.wav");
-          const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+          const ac = new AbortController();
+          const txTimeout = setTimeout(() => ac.abort(), 90_000);
+          let r: Response;
+          try {
+            r = await fetch("/api/transcribe", {
+              method: "POST",
+              body: fd,
+              signal: ac.signal,
+            });
+          } finally {
+            clearTimeout(txTimeout);
+          }
           if (!r.ok) {
             const txt = await r.text().catch(() => "");
-            throw new Error(txt || `Transcription failed (${r.status})`);
+            // Surface the FIRST 200 chars of the error so a missing OPENAI key
+            // or quota error is immediately diagnosable in the UI.
+            throw new Error(txt.slice(0, 200) || `Transcription failed (${r.status})`);
           }
           const data = (await r.json()) as { cues: CaptionCue[] };
           cues = data.cues || [];
           setCaptionCues(cues);
           cachedCuesForFileRef.current = fileKey;
         } catch (err) {
-          // Non-fatal: render proceeds without captions and we surface a hint.
-          setCaptionsError(err instanceof Error ? err.message : "Couldn't transcribe audio.");
+          // Non-fatal: render proceeds without captions, hint shown in UI.
+          const msg = err instanceof Error ? err.message : "Couldn't transcribe audio.";
+          console.warn("[mintflow] caption transcribe failed:", msg);
+          setCaptionsError(msg);
           cues = null;
         } finally {
           setCaptionsTranscribing(false);
